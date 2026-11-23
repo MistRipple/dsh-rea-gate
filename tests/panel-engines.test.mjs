@@ -180,5 +180,5 @@ assert.match(text(afterInstall), /\/opt\/homebrew\/bin\/apktool/)
 // Advanced diagnostics exposes the DSH registration path when expanded.
 findButton(afterInstall, '高级诊断').props.onClick()
 const withDiag = await render('main')
-assert.match(text(withDiag), /\/Users\/xie\/\.dsh\/cordis\.patch\.yml/)
+assert.match(text(withDiag), /\/Users\/example\/\.dsh\/cordis\.patch\.yml/)
 assert.ok(findButton(withDiag, '复制 DSH 配置路径'))
