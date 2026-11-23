@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { findButton, mountClient} from './client-fixture.mjs'
 
-let state = { installed: true, open: false, tools: 263, workspace: '/Users/xie/code/dsh-rea-gate' }
+let state = { installed: true, open: false, tools: 263, workspace: '/Users/example/code/dsh-rea-gate' }
 const posts = []
 globalThis.fetch = async (url, init) => {
   if (init?.method === 'POST') {

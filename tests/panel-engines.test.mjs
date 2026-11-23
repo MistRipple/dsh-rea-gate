@@ -13,9 +13,9 @@ let state = {
   registeredTools: 263,
   checkedAt: Date.now(),
   default: false,
-  registration: { state: 'aligned', path: '/Users/xie/.dsh/cordis.patch.yml' },
+  registration: { state: 'aligned', path: '/Users/example/.dsh/cordis.patch.yml' },
   capabilities: { homebrew: true },
-  workspaces: [{ path: '/Users/xie/code/sample-app', open: true }],
+  workspaces: [{ path: '/Users/example/code/sample-app', open: true }],
   engines: [
     {
       id: 'ghidra',
