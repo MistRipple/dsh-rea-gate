@@ -1,0 +1,55 @@
+{
+  "name": "dsh-rea-gate",
+  "version": "0.3.0",
+  "description": "Per-session gate for REA: keep the reverse-engineering toolset installed but expose it only in the sessions and workspaces that ask for it.",
+  "license": "MIT",
+  "author": "MistRipple",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MistRipple/dsh-rea-gate.git"
+  },
+  "homepage": "https://github.com/MistRipple/dsh-rea-gate#readme",
+  "bugs": {
+    "url": "https://github.com/MistRipple/dsh-rea-gate/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "rea",
+    "reverse-engineering",
+    "mcp"
+  ],
+  "engines": {
+    "dsh": ">=0.2.3-alpha.2 <0.3.0-0"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}

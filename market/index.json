@@ -1,0 +1,68 @@
+{
+  "format": 1,
+  "title": {
+    "en": "MistRipple DSH plugins",
+    "zh": "MistRipple DSH 插件"
+  },
+  "description": {
+    "en": "Self-hosted index for dsh-rea-gate.",
+    "zh": "dsh-rea-gate 的自建索引。"
+  },
+  "metadata": {
+    "categories": {
+      "tools": {
+        "title": {
+          "en": "Tools",
+          "zh": "工具"
+        }
+      }
+    },
+    "labels": {},
+    "sortKeys": {}
+  },
+  "plugins": [
+    {
+      "name": "dsh-rea-gate",
+      "title": {
+        "en": "REA Gate",
+        "zh": "REA 门控"
+      },
+      "description": {
+        "en": "Keep REA's reverse-engineering MCP tools installed once per host and expose them only in the workspaces and sessions that ask for them.",
+        "zh": "REA 逆向 MCP 工具在每个宿主只安装一次，只在需要的工作区和会话中向模型开放。"
+      },
+      "icon": "https://raw.githubusercontent.com/MistRipple/dsh-rea-gate/main/icon.svg",
+      "author": "MistRipple",
+      "homepage": "https://github.com/MistRipple/dsh-rea-gate#readme",
+      "repository": {
+        "url": "https://github.com/MistRipple/dsh-rea-gate"
+      },
+      "metadata": {
+        "category": "tools",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "deepseek-harness",
+          "rea",
+          "reverse-engineering",
+          "mcp"
+        ],
+        "labels": [],
+        "sortKeys": {}
+      },
+      "versions": [
+        {
+          "version": "0.3.0",
+          "publishTimestamp": 1795442893,
+          "source": {
+            "type": "npm",
+            "registry": "https://registry.npmjs.org/"
+          },
+          "engines": {
+            "dsh": ">=0.2.3-alpha.2 <0.3.0-0"
+          }
+        }
+      ]
+    }
+  ]
+}

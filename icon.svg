@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="REA gate">
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#101828"/>
+  <path d="M18 44V20h9.5c5.2 0 8.5 2.9 8.5 7.4 0 3.2-1.7 5.6-4.6 6.6L38 44h-6.4l-5.4-9.2H24V44h-6Zm6-14.2h3.2c1.9 0 3-.9 3-2.4s-1.1-2.4-3-2.4H24v4.8Z" fill="#e8f1ff"/>
+  <rect x="42" y="18" width="4" height="28" rx="2" fill="#3ba3a0"/>
+  <circle cx="44" cy="38" r="3.4" fill="#7ef0c8"/>
+</svg>

@@ -1,0 +1,6 @@
+url: https://github.com/MistRipple/dsh-rea-gate
+name: MistRipple/dsh-rea-gate
+category: tools
+description:
+  en: Keep REA's reverse-engineering MCP tools installed once per host and expose them only in the workspaces and sessions that ask for them.
+  zh: REA 逆向 MCP 工具在每个宿主只安装一次，只在需要的工作区和会话中向模型开放。
