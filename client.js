@@ -1515,11 +1515,37 @@ window.__ModuleLoader__.load({
 
       React.useEffect(() => {
         let current = true
+        let stopped = false
+        let inflight = false
+        let timer = null
         const path = `state?session=${encodeURIComponent(sessionId)}`
-        call(`${path}&checks=0`).then((next) => next?.installed === false ? call(path) : next).then((next) => {
+        // The gate also changes from the panel and from the `rea_gate` tool. The
+        // chip must not keep showing a decision another surface already reversed.
+        const read = async (full = false) => {
+          if (inflight) return null
+          inflight = true
+          const next = await call(full ? path : `${path}&checks=0`)
+          inflight = false
           if (current && next && next.ok !== false) setState(next)
+          return next
+        }
+        const schedule = () => {
+          timer = setTimeout(async () => {
+            if (stopped) return
+            await read()
+            if (!stopped) schedule()
+          }, 5_000)
+          timer?.unref?.()
+        }
+        void read().then((next) => {
+          if (current && next?.installed === false) void read(true)
+          if (!stopped) schedule()
         })
-        return () => { current = false }
+        return () => {
+          current = false
+          stopped = true
+          if (timer) clearTimeout(timer)
+        }
       }, [sessionId])
 
       if (!state) return null
