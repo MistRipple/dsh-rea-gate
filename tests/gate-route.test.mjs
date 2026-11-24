@@ -21,8 +21,8 @@ const ctx = {
     register: () => {},
   },
   on: (event, listener) => {
-    assert.equal(event, 'agent/created')
-    onAgentCreated = listener
+    if (event === 'agent/created') onAgentCreated = listener
+    else assert.equal(event, 'agent/disposed')
   },
   effect: (effect) => effect(),
   inject: (services, callback) => {

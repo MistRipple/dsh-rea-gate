@@ -20,6 +20,7 @@ const routes = new Map()
 const listedAgents = []
 const agentsById = new Map()
 let onAgentCreated
+let onAgentDisposed
 
 function makeAgent(id, cwd) {
   const denied = new Set()
@@ -49,8 +50,9 @@ const ctx = {
     register: () => {},
   },
   on: (event, listener) => {
-    assert.equal(event, 'agent/created')
-    onAgentCreated = listener
+    if (event === 'agent/created') onAgentCreated = listener
+    else if (event === 'agent/disposed') onAgentDisposed = listener
+    else assert.fail(`unexpected event ${event}`)
   },
   effect: (effect) => effect(),
   inject: (services, callback) => {
@@ -100,3 +102,25 @@ assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).workspaces['/projects/c
 const fresh = makeAgent('fresh', '/projects/open')
 onAgentCreated({ agent: fresh })
 assert.deepEqual(fresh.ctx.visible(), toolNames)
+
+// A disposed agent is forgotten: its session stops resolving and the bookkeeping
+// no longer keeps the transcript alive.
+const readSession = async (id) => (await routes.get('/api/dsh-rea-gate/state').fetch(
+  new Request(`http://harness.test/api/dsh-rea-gate/state?session=${id}&checks=0`),
+)).json()
+assert.equal((await readSession('closed')).sessionKnown, true)
+listedAgents.splice(listedAgents.indexOf(closed), 1)
+agentsById.delete('closed')
+onAgentDisposed({ agent: closed })
+const disposed = await readSession('closed')
+assert.equal(disposed.sessionKnown, false)
+assert.equal(disposed.workspace, null)
+const disposedToggle = await routes.get('/api/dsh-rea-gate/toggle').fetch(
+  new Request('http://harness.test/api/dsh-rea-gate/toggle', {
+    method: 'POST',
+    body: JSON.stringify({ session: 'closed', open: true }),
+  }),
+)
+assert.equal(disposedToggle.status, 404)
+// The still-live session keeps its entry.
+assert.equal((await readSession('open')).sessionKnown, true)

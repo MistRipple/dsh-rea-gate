@@ -56,7 +56,7 @@
 
 | 路由 | 请求 | 返回或行为 |
 |---|---|---|
-| `/api/dsh-rea-gate/state` | GET | 注册、版本、默认值、工作区规则和引擎。用 `session=<id>` 查询会话可见数，用 `refresh=1` 重新体检。 |
+| `/api/dsh-rea-gate/state` | GET | 注册、版本、默认值、工作区规则和引擎。用 `session=<id>` 查询会话可见数，用 `refresh=1` 重新体检。`checks: "pending"` 表示体检仍在后台运行，面板会自动重读。 |
 | `/api/dsh-rea-gate/toggle` | POST | `{ open }` 设置默认值，`{ workspace, open }` 设置工作区规则，`{ session, open, remember? }` 切换会话。 |
 | `/api/dsh-rea-gate/toggle` | POST | `{ action }` 支持 `install`、`reinstall`、`update`、`uninstall`（可选 `removePackage: true`）、`check-update`、`install-engine`（`engine`）、`set-env`（`values`）与 `reset-workspace`（`workspace`）。 |
 | `/api/dsh-rea-gate/diagnose` | GET | `graph.selfPresent` 表示宿主模块图中是否包含本插件。面板底部的 **高级诊断** 可直接查询。 |

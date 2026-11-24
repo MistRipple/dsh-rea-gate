@@ -626,17 +626,36 @@ window.__ModuleLoader__.load({
       const [feedback, setFeedback] = React.useState(null)
       const request = React.useRef(false)
       const updateRequest = React.useRef(false)
+      const followUps = React.useRef(0)
+      const followTimer = React.useRef(null)
 
-      const load = React.useCallback(async (refresh = false) => {
+      React.useEffect(() => () => {
+        if (followTimer.current) clearTimeout(followTimer.current)
+      }, [])
+
+      const load = React.useCallback(async (refresh = false, options = {}) => {
         if (request.current) return
         request.current = true
-        setPending('load')
-        setFeedback(null)
+        if (!options.silent) {
+          setPending('load')
+          setFeedback(null)
+        }
         const next = await call(refresh ? 'state?refresh=1' : 'state')
-        if (next && next.ok !== false) setState(next)
-        else setFeedback({ operation: 'load', error: true, title: '无法读取本机状态，请重试。' })
+        if (next && next.ok !== false) {
+          setState(next)
+          // A slow engine check answered with the cached view. Re-read once the
+          // background `rea doctor` settles instead of blocking the first paint.
+          if (next.checks === 'pending' && followUps.current < 3) {
+            followUps.current += 1
+            if (followTimer.current) clearTimeout(followTimer.current)
+            followTimer.current = setTimeout(() => { void load(false, { silent: true }) }, 2_000)
+            followTimer.current?.unref?.()
+          }
+        } else if (!options.silent) {
+          setFeedback({ operation: 'load', error: true, title: '无法读取本机状态，请重试。' })
+        }
         request.current = false
-        setPending(null)
+        if (!options.silent) setPending(null)
       }, [])
 
       React.useEffect(() => { void load() }, [load])

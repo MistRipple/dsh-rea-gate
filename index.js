@@ -55,6 +55,10 @@ const COMMANDS = {
   uninstall: ['uninstall'],
 }
 const DOCTOR_TTL = 30_000
+// The panel's first paint must not wait for a slow `rea doctor`. A bounded wait
+// returns the cached view with `checks: 'pending'`, and the browser re-reads
+// once the run settles.
+const DOCTOR_WAIT_MS = Number(process.env.REA_GATE_DOCTOR_WAIT_MS ?? 2_500) || 2_500
 
 export const name = 'dsh-rea-gate'
 export const inject = ['tools']
@@ -381,8 +385,23 @@ export function apply(ctx) {
         diagnosis = { report, cli, checkedAt: Date.now() }
         return diagnosis
       })
+      // A background run must never reject: a timed-out reader already moved on.
+      .catch(() => diagnosis)
       .finally(() => { diagnosing = undefined })
     return diagnosing
+  }
+
+  /** Wait for the diagnosis at most `waitMs`; false means it is still running. */
+  function inspectReaWithin(force, waitMs) {
+    const running = inspectRea(force)
+    if (!running) return Promise.resolve(true)
+    let timer
+    const expiry = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(false), waitMs)
+      timer?.unref?.()
+    })
+    return Promise.race([running.then(() => true, () => true), expiry])
+      .finally(() => clearTimeout(timer))
   }
 
   async function syncRegistrationWithEnv(state, extraDirs = []) {
@@ -599,7 +618,19 @@ export function apply(ctx) {
   /** Apply the saved policy to agents that existed before this plugin instance loaded. */
   function reconcileExistingAgents() {
     if (!liveAgents?.list) return
-    for (const agent of liveAgents.list()) {
+    const live = liveAgents.list()
+    // Drop bookkeeping for sessions that left the registry while this instance
+    // was not loaded; their scopes already unwound the deny masks.
+    const liveIds = new Set()
+    const liveSet = new Set(live)
+    for (const agent of live) {
+      const sessionId = agent?.session?.header?.id
+      if (typeof sessionId === 'string') liveIds.add(sessionId)
+    }
+    for (const [sessionId, entry] of sessions) {
+      if (!liveIds.has(sessionId) && !liveSet.has(entry.agent)) sessions.delete(sessionId)
+    }
+    for (const agent of live) {
       try {
         const sessionId = agent?.session?.header?.id
         const workspace = workspaceOf(agent)
@@ -613,6 +644,19 @@ export function apply(ctx) {
     }
   }
 
+  /**
+   * An agent that left the registry needs no bookkeeping: its scope already
+   * unwound the deny mask, and holding the reference would keep the session
+   * (and its transcript) alive for the lifetime of the host process.
+   */
+  function forgetAgent(agent) {
+    gates.delete(agent)
+    const sessionId = agent?.session?.header?.id
+    if (typeof sessionId !== 'string') return
+    const entry = sessions.get(sessionId)
+    if (entry && entry.agent === agent) sessions.delete(sessionId)
+  }
+
   // The creation payload is { agent, source, signal }; only its `agent` has a ctx.
   ctx.on('agent/created', (...args) => {
     const agent = args[0]?.agent
@@ -622,6 +666,15 @@ export function apply(ctx) {
       const sessionId = agent?.session?.header?.id
       if (typeof sessionId === 'string') sessions.set(sessionId, { agent, workspace })
       applyChoice(agent, isOpen(readState(), workspace))
+    } catch {}
+  })
+
+  // The disposal payload is `{ agent }`, like creation.
+  ctx.on('agent/disposed', (...args) => {
+    const agent = args[0]?.agent
+    if (!agent || typeof agent !== 'object') return
+    try {
+      forgetAgent(agent)
     } catch {}
   })
 
@@ -697,8 +750,14 @@ export function apply(ctx) {
           fetch: async (request) => {
             const params = url(request).searchParams
             const session = params.get('session') ?? undefined
-            if (params.get('checks') !== '0') await inspectRea(params.get('refresh') === '1')
-            return json(await stateFor(session))
+            const checks = params.get('checks') !== '0'
+            // A slow `rea doctor` must not hold the first paint. The reader gets
+            // the cached view plus `checks: 'pending'` and asks again once the
+            // background run settles.
+            const settled = checks
+              ? await inspectReaWithin(params.get('refresh') === '1', DOCTOR_WAIT_MS)
+              : true
+            return json({ ...(await stateFor(session)), checks: settled ? 'done' : 'pending' })
           },
         }),
       'dsh-rea-gate: state route',

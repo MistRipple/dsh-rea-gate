@@ -14,6 +14,7 @@ node tests/panel-uninstalled.test.mjs  # not installed: 安装 → POST {"action
 node tests/chip.test.mjs               # header chip → POST {"session":…,"open":true}
 node tests/gate-route.test.mjs         # toggle route: no-workspace sessions and remember semantics
 node tests/gate-reload.test.mjs        # reload: existing agents are re-gated and lazily resolved
+node tests/gate-doctor.test.mjs        # slow `rea doctor`: first paint returns `checks: pending`
 ```
 
 To verify the running Desktop page, check that the client inspector lists the
