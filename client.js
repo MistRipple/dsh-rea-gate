@@ -240,14 +240,11 @@ window.__ModuleLoader__.load({
   box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
 }
 .rea-composer-trigger:disabled { color: var(--dsw-alias-label-dimmed); cursor: default; }
-.rea-composer-icon { display: inline-flex; flex: 0 0 auto; }
-.rea-composer-icon svg { width: 16px; height: 16px; }
 .rea-composer-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rea-composer-chevron {
   display: inline-flex; flex: 0 0 auto; color: var(--dsw-alias-label-caption); transition: transform 120ms ease;
 }
 .rea-composer-chevron-open { transform: rotate(180deg); }
-@container (max-width: 460px) { .rea-composer-icon ~ .rea-composer-label { display: none; } }
 `
     const CHIP_POLL_MS = 5_000
 
@@ -1772,7 +1769,6 @@ window.__ModuleLoader__.load({
         disabled: busy || !installed,
         onClick: () => setMenuOpen(!menuOpen),
       },
-      h('span', { className: 'rea-composer-icon', 'aria-hidden': true }, h(ReaIcon, { size: 16 })),
       h('span', { className: 'rea-composer-label' }, label),
       IconChevronDownOutlineRegular
         ? h('span', { className: 'rea-composer-chevron' + (menuOpen ? ' rea-composer-chevron-open' : ''), 'aria-hidden': true },

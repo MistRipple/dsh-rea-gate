@@ -135,8 +135,7 @@ A quit and reopen provides a fresh page boot. The session persists on disk.
    2026-11-24: it renders right of the permission control in the new-session composer,
    in an existing session's composer and in the side sub-agent composer; the portaled
    Menu opens upward with 开启/关闭 and a check on the current state; choosing 关闭
-   switched the label to `REA 关` and left `rea-gate.json` untouched. Not checked: a
-   narrow composer (label hiding), the English UI, and that a closed session really
+   switched the label to `REA 关` and left `rea-gate.json` untouched. The trigger is text only (`REA 开 ▾`, no icon, no narrow-width label hiding). Not checked: the English UI, and that a closed session really
    reports 0 REA tools through the live `/state` route. A plugin's host code only
    reloads when the plugin is disabled and enabled again in Plugins → Installed; the
    client bundle hot-reloads on its own.
