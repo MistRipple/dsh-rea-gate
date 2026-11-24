@@ -12,7 +12,8 @@ REA registers roughly 263 `mcp__rea__*` tools on every DSH session. Most session
 
 ## Requirements
 
-- DSH `>=0.2.3-alpha.2 <0.3.0-0` (declared as `engines.dsh`).
+- DSH `>=0.2.2-rc.1 <0.3.0-0 || >=0.2.3-alpha.2 <0.3.0-0` (declared as `engines.dsh`).
+  The range is split in two because semver only lets a prerelease satisfy a bound that names the same `major.minor.patch`: the first half covers the 0.2.2 release candidates and stable 0.2.x, the second the 0.2.3 alphas. Live-tested on 0.2.3-alpha.2; the 0.2.2 line (the npm `latest` tag, 0.2.2-rc.5) was checked against its published packages — every host and client API the bundle uses is present there — but not run in a live Desktop.
 - The REA CLI (`rea-agents`) for the install and update actions. Gating itself works whenever REA is already registered with DSH.
 - Node.js 20 or newer, which DSH already requires.
 - macOS or Linux. The gate itself is plain JavaScript and should work anywhere DSH does; the install, update and engine helpers have Windows handling (`.cmd` launchers) that has not been tested on Windows. Homebrew engine installs are macOS only.
