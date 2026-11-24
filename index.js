@@ -30,6 +30,7 @@ import {
 } from './lib/rea-cli.js'
 import { canDownload, enginesRoot, installEngineByDownload } from './lib/engine-download.js'
 import { pickPath } from './lib/pick-path.js'
+import { compareEnv, readRegisteredEnv } from './lib/registration-env.js'
 import {
   ALLOWED_ENGINE_ENV,
   ENGINE_INSTALLERS,
@@ -574,6 +575,17 @@ export function apply(ctx) {
       ? false
       : Boolean(registration || registered > 0 || tools > 0)
     const brewPrefix = detectHomebrewPrefix()
+    // The paths saved in the panel only work in a session if DSH's REA
+    // registration carries them too; `rea doctor` cannot tell.
+    const registeredEnv = registration?.state === 'missing' ? { ok: false } : readRegisteredEnv(registration?.config_path)
+    const envProblems = registeredEnv.ok ? compareEnv(state.env, registeredEnv.env) : []
+    const problemOf = new Map(envProblems.map(({ name, state: problem }) => [name, problem]))
+    const engines = doctorEngineState(report, state, brewPrefix, tr).map((engine) => ({
+      ...engine,
+      variables: engine.variables.map((variable) => (registeredEnv.ok && variable.value
+        ? { ...variable, sync: problemOf.get(variable.name) ?? 'ok' }
+        : variable)),
+    }))
     return {
       open,
       // The gate is closed but the session can still see REA tools.
@@ -598,7 +610,9 @@ export function apply(ctx) {
       default: state.default,
       sessionKnown: entry !== undefined,
       capabilities: { homebrew: Boolean(brewPrefix) },
-      engines: doctorEngineState(report, state, brewPrefix, tr),
+      // `null` when the registration could not be read back.
+      envSync: registeredEnv.ok ? { problems: envProblems } : null,
+      engines,
     }
   }
 

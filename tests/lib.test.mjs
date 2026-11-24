@@ -12,8 +12,9 @@ process.env.USERPROFILE = home
 delete process.env.REA_BIN
 
 const { isOpen, readState, writeState } = await import('../lib/state.js')
-const { normalizeEnvValue, probeJavaHome } = await import('../lib/engines.js')
-const { findBinary, runCommand, installReaPackage, HEALTHY_REGISTRATION, parseJsonOutput } = await import('../lib/rea-cli.js')
+const { doctorEngineState, normalizeEnvValue, probeJavaHome } = await import('../lib/engines.js')
+const { decodeOutput, findBinary, runCommand, installReaPackage, withPath, HEALTHY_REGISTRATION, parseJsonOutput } = await import('../lib/rea-cli.js')
+const { compareEnv, parseRegisteredEnv, readRegisteredEnv } = await import('../lib/registration-env.js')
 const tr = (_chinese, english) => english
 
 // The saved policy is one default plus the engine env; old per-workspace rules are dropped.
@@ -114,3 +115,63 @@ const offline = await installReaPackage({}, async (command, args, timeout, optio
 })
 assert.equal(offline.ok, false)
 assert.equal(calls.length, 1, 'a network failure is not retried')
+
+// With no `rea doctor` verdict, a saved engine path is checked locally instead of staying "unverified".
+const jar = join(root, 'jadx-headless-mcp-0.8.0-all.jar')
+writeFileSync(jar, 'jar')
+const javaDir = jdk(join(root, 'jdk-for-jadx'))
+const engineFor = (id, values) => doctorEngineState(null, { env: values }, null, tr).find((engine) => engine.id === id)
+const withJava = engineFor('jadx', { REA_JADX_MCP_JAR: jar, JAVA_HOME: javaDir })
+assert.deepEqual([withJava.checked, withJava.configured, withJava.available], [true, true, true])
+assert.deepEqual(withJava.checks.map((check) => check.name), ['jadx', 'java'])
+const noJava = engineFor('jadx', { REA_JADX_MCP_JAR: jar, JAVA_HOME: join(root, 'no-such-jdk') })
+if (!probeJavaHome({ JAVA_HOME: join(root, 'no-such-jdk') }, null).available) {
+  assert.equal(noJava.available, false)
+  assert.match(noJava.checks.at(-1).detail, /jadx needs Java/)
+}
+const badJar = engineFor('jadx', { REA_JADX_MCP_JAR: join(root, 'missing.jar') })
+assert.deepEqual([badJar.checked, badJar.available], [true, false])
+assert.match(badJar.checks[0].detail, /not found/)
+assert.match(engineFor('jadx', { REA_JADX_MCP_JAR: tool }).checks[0].detail, /\.jar file/)
+assert.ok(!engineFor('jadx', {}).checked, 'nothing configured stays unchecked')
+assert.equal(engineFor('hopper', { HOPPER_LAUNCHER_PATH: home }).available, true, 'Hopper accepts a file or a bundle')
+assert.equal(engineFor('ida', { REA_IDA_MCP_CONFIG: home }).available, false, 'an IDA config must be a file')
+
+// Windows spells the variable `Path`: it is extended in place, never shadowed by a second `PATH`.
+const winEnv2 = withPath({ Path: 'C:\\Windows;C:\\nodejs', USERPROFILE: 'C:\\Users\\x' }, ['C:\\npm', null, 'C:\\nodejs'])
+assert.deepEqual(Object.keys(winEnv2).filter((key) => key.toLowerCase() === 'path'), ['Path'])
+assert.equal(winEnv2.Path, ['C:\\npm', 'C:\\nodejs', 'C:\\Windows;C:\\nodejs'].join(process.platform === 'win32' ? ';' : ':'))
+assert.equal(winEnv2.USERPROFILE, 'C:\\Users\\x')
+assert.deepEqual(Object.keys(withPath({}, ['/a'])), ['PATH'], 'no PATH at all still gets one')
+assert.equal(withPath({ PATH: '/usr/bin' }, ['/a']).PATH, ['/a', '/usr/bin'].join(process.platform === 'win32' ? ';' : ':'))
+
+// Output decoding: UTF-8 as is; on Windows a GBK answer from cmd.exe stays readable.
+assert.equal(decodeOutput(Buffer.from('已安装 ✓')), '已安装 ✓')
+assert.equal(decodeOutput('plain'), 'plain')
+assert.equal(decodeOutput(Buffer.alloc(0)), '')
+if (process.platform === 'win32') {
+  assert.equal(decodeOutput(Buffer.from([0xb2, 0xbb, 0xca, 0xc7, 0xc4, 0xda, 0xb2, 0xbf])), '不是内部')
+}
+
+// Who judged each engine is reported, so the panel never presents a path check as REA's verdict.
+assert.equal(withJava.verdict, 'path')
+assert.equal(engineFor('jadx', {}).verdict, 'none')
+assert.equal(engineFor('java', { JAVA_HOME: javaDir }).verdict, 'local')
+assert.equal(doctorEngineState({ providerInspections: [{ id: 'jadx', configured: true, available: true, checks: [] }] }, { env: {} }, null, tr).find((engine) => engine.id === 'jadx').verdict, 'rea')
+
+// The registration read-back: what DSH's REA entry actually carries.
+const patch = '[ { insert: [ { id: rea-mcp, name: "@deepseek-ai/dsh-mcp-client", config: { serverName: rea, transport: stdio, command: "C:\\\\Program Files\\\\nodejs\\\\node.exe", args: [ rea, mcp ], env: { JAVA_HOME: "C:\\\\Program Files\\\\jdk, 21", REA_ADB_PATH: \'it\'\'s\', GHIDRA_INSTALL_DIR: /opt/ghidra } } } ] } ]'
+assert.deepEqual({ ...parseRegisteredEnv(patch) }, { JAVA_HOME: 'C:\\Program Files\\jdk, 21', REA_ADB_PATH: "it's", GHIDRA_INSTALL_DIR: '/opt/ghidra' })
+assert.deepEqual(parseRegisteredEnv('[ { insert: [ { config: { serverName: rea, command: x } } ] } ]'), {}, 'an entry without env carries nothing')
+assert.equal(parseRegisteredEnv('[ { insert: [ { config: { serverName: other, env: { A: b } } } ] } ]'), null, 'another server is not REA')
+assert.equal(parseRegisteredEnv('not yaml at all'), null)
+assert.deepEqual(readRegisteredEnv(join(root, 'no-such.yml')), { ok: false })
+writeFileSync(join(root, 'patch.yml'), patch)
+const registeredEnv = readRegisteredEnv(join(root, 'patch.yml'))
+assert.equal(registeredEnv.ok, true)
+assert.deepEqual(compareEnv({ GHIDRA_INSTALL_DIR: '/opt/ghidra', REA_JADX_MCP_JAR: '/x/jadx.jar', REA_ADB_PATH: '/other', EMPTY: '' }, registeredEnv.env, false), [
+  { name: 'REA_JADX_MCP_JAR', state: 'missing' },
+  { name: 'REA_ADB_PATH', state: 'different' },
+])
+assert.deepEqual(compareEnv({ JAVA_HOME: 'c:\\program files\\JDK, 21' }, registeredEnv.env, true), [], 'Windows paths ignore case')
+assert.deepEqual(compareEnv({ JAVA_HOME: 'c:\\program files\\JDK, 21' }, registeredEnv.env, false).map((p) => p.state), ['different'])

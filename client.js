@@ -38,6 +38,14 @@ window.__ModuleLoader__.load({
       '路径配置已保存并重新检测': 'Path saved and re-checked',
       '无法保存路径配置，请重试。': 'Could not save the path. Please try again.',
       '例如': 'e.g.',
+      'DSH 的 REA 注册里是另一个值，会话里的 REA 不会用到这里保存的路径。': 'DSH\'s REA registration holds a different value, so sessions will not use the path saved here.',
+      '已保存，但还没有写入 DSH 的 REA 注册，会话里的 REA 读不到它。': 'Saved, but not written to DSH\'s REA registration yet, so REA in a session cannot see it.',
+      '以下路径已保存，但 DSH 的 REA 注册里没有对应的值：{}。检测通过也不代表会话里能用，请重新写入注册。': 'These paths are saved but missing from DSH\'s REA registration: {}. A passing check does not mean sessions can use them; write them to the registration again.',
+      '重新注册到 DSH': 'Register with DSH again',
+      '路径有效': 'Path found',
+      '已确认路径存在且类型正确，但 REA 还没有验证它能否运行。点击重新检测，让 REA 再检查一次。': 'The path exists and is the right kind of file, but REA has not checked that it runs. Re-check to let REA verify it.',
+      '已保存路径，但 REA 命令无法运行，所以还不能验证。请先在上方修复或重装 REA，再重新检测。': 'The path is saved, but the REA command cannot run, so it cannot be verified yet. Fix or reinstall REA above, then re-check.',
+      '已保存路径，但 REA 的检测结果里没有这个引擎，所以还不能验证。可以重新检测一次。': 'The path is saved, but REA reported nothing for this engine, so it cannot be verified yet. Try re-checking.',
       '宿主端还是旧版本，尚不支持选择对话框。请在 插件 → 已安装 中把本插件关闭再开启，或直接填写路径。': 'The host is still running an older version of this plugin and cannot open the chooser. Turn the plugin off and on again under Plugins → Installed, or type the path.',
       '选择文件夹': 'Choose a folder',
       '选择文件': 'Choose a file',
@@ -1321,9 +1329,11 @@ window.__ModuleLoader__.load({
     function engineMeta(engine) {
       const { id, available, checked, configured } = engine
       const needsCheck = Boolean(checked && configured && !available)
+      const pathOnly = Boolean(available && engine.verdict === 'path')
       const state = available ? 'ready' : needsCheck ? 'attention' : 'idle'
-      const tone = available ? 'ready' : needsCheck ? 'attention' : configured ? 'info' : 'idle'
-      const status = available ? t('可用')
+      const tone = pathOnly ? 'info' : available ? 'ready' : needsCheck ? 'attention' : configured ? 'info' : 'idle'
+      const status = pathOnly ? t('路径有效')
+        : available ? t('可用')
         : needsCheck ? t('需检查')
           : configured ? t('已配置，待验证')
             : checked ? t('未配置')
@@ -1398,6 +1408,10 @@ window.__ModuleLoader__.load({
           ),
           h(CopyButton, { text: varName, label: t('复制变量'), ariaLabel: tt`复制环境变量 ${varName}` }),
         ),
+        variable.sync && variable.sync !== 'ok' && h('p', { className: 'rea-env-error', role: 'status' },
+          variable.sync === 'different'
+            ? t('DSH 的 REA 注册里是另一个值，会话里的 REA 不会用到这里保存的路径。')
+            : t('已保存，但还没有写入 DSH 的 REA 注册，会话里的 REA 读不到它。')),
         h('form', { className: 'rea-env-edit', onSubmit: submit },
           h('input', {
             type: 'text',
@@ -1438,7 +1452,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function EngineRow({ engine, expanded, onToggle, pending, feedback, run, dismissFeedback }) {
+    function EngineRow({ engine, expanded, onToggle, pending, feedback, run, dismissFeedback, recheck, cli }) {
       const detailId = React.useId()
       const { id, available, variables, checks, version, canInstall, installCommand } = engine
       const provider = providers[id] ?? { name: id, description: t('可选分析引擎。') }
@@ -1525,8 +1539,17 @@ window.__ModuleLoader__.load({
           rowFeedback && h(Feedback, { feedback: rowFeedback, onDismiss: dismissFeedback }),
           available
             ? h('div', { className: 'rea-diag-box', 'data-tone': 'ready' },
-              h('p', null, t('本机检测通过，在启用 REA 的会话中可直接调用此引擎。')),
+              h('p', null, engine.verdict === 'path'
+                ? t('已确认路径存在且类型正确，但 REA 还没有验证它能否运行。点击重新检测，让 REA 再检查一次。')
+                : t('本机检测通过，在启用 REA 的会话中可直接调用此引擎。')),
               passedDetails.length > 0 && h('div', { className: 'rea-path-code', dir: 'ltr' }, passedDetails.join(' · ')),
+            )
+            : (!engine.checked && engine.configured)
+              ? h('div', { className: 'rea-diag-box', 'data-tone': 'idle' },
+              h('p', null, ['missing', 'unavailable'].includes(cli)
+                ? t('已保存路径，但 REA 命令无法运行，所以还不能验证。请先在上方修复或重装 REA，再重新检测。')
+                : t('已保存路径，但 REA 的检测结果里没有这个引擎，所以还不能验证。可以重新检测一次。')),
+              h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: recheck }, t('重新检测')),
             )
             : parsedHints.length > 0 && h('div', { className: 'rea-detail-block' },
               h('div', { className: 'rea-detail-label' }, state === 'attention' ? t('异常诊断（rea doctor）') : t('检测详情（rea doctor）')),
@@ -1619,6 +1642,14 @@ window.__ModuleLoader__.load({
       },
         h('div', { className: 'rea-group' },
           checkFailure && h('div', { className: 'rea-content' }, h(Feedback, { feedback: checkFailure })),
+          state.envSync?.problems?.length > 0 && h('div', { className: 'rea-content' },
+            h('div', { className: 'rea-diag-box', 'data-tone': 'attention', role: 'status' },
+              h('p', null, tt`以下路径已保存，但 DSH 的 REA 注册里没有对应的值：${state.envSync.problems.map(({ name }) => name).join('、')}。检测通过也不代表会话里能用，请重新写入注册。`),
+              h(Button, {
+                variant: 'outline', size: 'sm', disabled: Boolean(pending),
+                onClick: () => run({ action: 'install' }, 'install'),
+              }, t('重新注册到 DSH')),
+            )),
           groups.map((group, groupIndex) => h('div', { key: group.id },
             h('div', { className: groupIndex === 0 && !checkFailure ? 'rea-subhead' : 'rea-subhead rea-divider' },
               h('span', null, group.title),
@@ -1634,6 +1665,8 @@ window.__ModuleLoader__.load({
                 feedback,
                 run,
                 dismissFeedback,
+                recheck: () => load(true),
+                cli: state.cli,
               })),
             ),
           )),

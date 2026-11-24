@@ -77,6 +77,16 @@ let state = {
       checks: [],
     },
     {
+      id: 'kuna',
+      checked: false,
+      configured: true,
+      available: false,
+      verdict: 'none',
+      canInstall: false,
+      variables: [{ name: 'REA_KUNA_COMMAND', set: true, value: 'C:\\\\tools\\\\kuna.exe' }],
+      checks: [],
+    },
+    {
       id: 'hopper',
       checked: true,
       configured: false,
@@ -88,7 +98,9 @@ let state = {
   ],
 }
 
+let fetchCount = 0
 globalThis.fetch = async (_url, init) => {
+  fetchCount++
   if (init?.method === 'POST') {
     const body = JSON.parse(init.body)
     posts.push(body)
@@ -158,9 +170,49 @@ assert.ok(findElement(withJadx, ({ type, props }) => type === 'a' && props.href 
 assert.ok(findButton(withJadx, '复制 SHA-256'))
 assert.match(text(withJadx), /SHA-256: 6e5eacf5/)
 
+// A saved path nobody has judged yet says why, and offers a re-check.
+const kunaRow = findButton(await render('main'), 'Kuna')
+assert.match(text(kunaRow), /已配置，待验证/)
+kunaRow.props.onClick()
+const withKuna = await render('main')
+assert.match(text(withKuna), /REA 的检测结果里没有这个引擎/)
+const rechecksBefore = fetchCount
+await findButton(withKuna, '重新检测').props.onClick()
+assert.ok(fetchCount > rechecksBefore, 'the row offers its own re-check')
+// Once a path-only verdict arrives it is not shown as REA's "available".
+state = {
+  ...state,
+  engines: state.engines.map((engine) => engine.id === 'kuna'
+    ? { ...engine, checked: true, available: true, verdict: 'path', checks: [{ name: 'kuna', ok: true, detail: 'C:\\\\tools\\\\kuna.exe', remediation: null }] }
+    : engine),
+}
+await findButton(await render('main'), '重新检测').props.onClick()
+const kunaPathOnly = findButton(await render('main'), 'Kuna')
+assert.match(text(kunaPathOnly), /路径有效/)
+assert.doesNotMatch(text(kunaPathOnly), /可用/)
+
+// A saved path the DSH registration does not carry is called out, even when the check passed.
+const syncedState = state
+state = {
+  ...state,
+  envSync: { problems: [{ name: 'REA_JADX_MCP_JAR', state: 'missing' }] },
+  engines: state.engines.map((engine) => engine.id === 'jadx'
+    ? { ...engine, variables: engine.variables.map((variable) => ({ ...variable, value: '/x/jadx.jar', set: true, sync: 'missing' })) }
+    : engine),
+}
+await findButton(await render('main'), '重新检测').props.onClick()
+const unsynced = await render('main')
+assert.match(text(unsynced), /以下路径已保存，但 DSH 的 REA 注册里没有对应的值：REA_JADX_MCP_JAR/)
+assert.match(text(findElement(unsynced, ({ type, props }) => type === 'div' && props['data-tone'] === 'attention' && props.role === 'status')), /重新注册到 DSH/)
+await findButton(unsynced, '重新注册到 DSH').props.onClick()
+assert.deepEqual(posts.at(-1), { action: 'install' })
+state = syncedState
+await findButton(await render('main'), '重新检测').props.onClick()
+assert.doesNotMatch(text(await render('main')), /DSH 的 REA 注册里没有对应的值/)
+
 // Section meta summarizes readiness without extra filter tabs.
-assert.match(text(withJadx), /可用 1 \/ 6 · 需检查 1/)
-assert.equal(findButton(withJadx, '全部 6'), undefined)
+assert.match(text(withJadx), /可用 1 \/ 7 · 需检查 1/)
+assert.equal(findButton(withJadx, '全部 7'), undefined)
 
 // Inline path editor saves a custom path for jadx.
 const jadxInput = findElement(withJadx, ({ type, props }) => type === 'input' && props['aria-label'] === 'REA_JADX_MCP_JAR 路径')
