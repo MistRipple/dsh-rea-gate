@@ -21,9 +21,11 @@ Host (index.js)
   agent/created  ──► read ~/.dsh/rea-gate.json
                       ├─ workspace open  → nothing
                       └─ workspace closed → agent.ctx.tools.restrict({ deny: [names] })
-  rea_gate tool  ──► status | on | off | install | uninstall
+  agent/disposed ──► forget the session's bookkeeping (the scope already lifted the mask)
+  ctx.inject(['agents']) ──► re-apply the saved policy to agents that predate a reload
+  rea_gate tool  ──► status | on | off | install | update | uninstall
   child plugin   ──► ctx.inject(['connection']) ──► exact /api routes
-                     GET  /api/dsh-rea-gate/state?session=<id>
+                     GET  /api/dsh-rea-gate/state?session=<id>&checks=0|1&refresh=0|1
                      POST /api/dsh-rea-gate/toggle  { open, session? } | { open, workspace } | { action }
                      GET  /api/dsh-rea-gate/diagnose
 
@@ -31,8 +33,12 @@ Browser (client.js)
   sidebar.panellist ──► REA icon in the left rail
   main (key=rea-gate) ──► lifecycle controls, session defaults, engine checks and usage
   plugins.bundle.config ──► same management controls on the plugin detail page
-  conversation.session.header.actions ──► REA 开/关 chip
+  conversation.session.header.actions ──► REA 开/关 chip, polling every 5s
 ```
+
+`GET /state` waits at most `REA_GATE_DOCTOR_WAIT_MS` (default 2500 ms) for
+`rea doctor`. A slower run answers `checks: "pending"` with the cached view and
+finishes in the background; the panel re-reads once it settles.
 
 State file `$DSH_HOME/rea-gate.json`:
 
@@ -56,12 +62,19 @@ State file `$DSH_HOME/rea-gate.json`:
 | Lifecycle controls | Desktop read REA 6.10.1, aligned DSH registration and 263 loaded tools. **Check update** returned npm stable 6.10.1. The install, update and uninstall UI actions are covered by simulated requests. |
 | Module graph | the Desktop panel's **Check module graph** reported `selfPresent` |
 | Routes reachable | the Desktop panel loads registration, workspace and engine data; the header chip toggles the live session |
+| Reload re-gates live sessions | workspace closed → reload the plugin → the existing session stays at 0 tools without a manual toggle |
+| Disposed session forgotten | `agent/disposed` drops the entry; `/state?session=` reports `sessionKnown: false` and toggle answers 404 |
+| Workspace-less chip | a session with no `cwd` toggles itself only; the global default and `rea-gate.json` stay unchanged |
+| `remember: true` | honoured with a workspace; rejected with a 400 when the session has no workspace |
+| First paint not blocked | a 1.2 s `rea doctor` still answers in <900 ms with `checks: "pending"`, then settles to `done` |
+| Chip follows other surfaces | polling picks up a change made through the panel or the `rea_gate` tool within 5 s |
 
-The latest Desktop verification used the new DSH child agent's own schema and
-`rea_gate status`: zero visible REA tools and the status tool still callable.
-That session did not expose `cordis_inspect_query`. The running page displayed
-the REA sidebar entry and loaded real panel data. The old request log probe has
-been removed.
+The latest Desktop verification reloaded the plugin twice with
+`plugin_manager set_plugin target="include:rea-gate"` and then drove the real
+page: the REA panel rendered live engine rows from `rea doctor`, the sidebar and
+session-header slots stayed active, and the header chip toggled the session
+(263 → 0 → 263) with the host agreeing at each step. A closed workspace stayed
+closed across a reload without a manual toggle.
 
 ## Host / client reload, which cost hours to pin down
 
@@ -104,7 +117,10 @@ A quit and reopen provides a fresh page boot. The session persists on disk.
    and reports environment variable presence for uncovered engines.
 2. The `/diagnose` route reports whether the host composed the browser module.
    Both the sidebar and `plugins.bundle.config` keyed by package name provide the console.
-3. `docs/DETAIL.md` and `locale/` now describe the workspace and engine controls.
+3. `docs/DETAIL.md` and `locale/` describe the workspace and engine controls.
+4. `sessions` is pruned on `agent/disposed` and on load; if a session ends without
+   that event the entry survives until the next reload. The chip polls, so a stale
+   indicator cannot outlive five seconds.
 
 ## API facts worth keeping
 
@@ -117,6 +133,14 @@ Harness internals that took experiments to pin down:
   patterns), throws on unknown names, requires a scoped context, returns a disposer,
   and removes the hidden tools' schema cost. Names are discovered from
   `ctx.tools.schemas(scope)` and filtered by the `mcp__rea__` prefix.
+- `tools.schemas(scope)` accepts the **Agent itself**: `ScopeKey` is `object`, and the
+  documented scope is "the viewing scope (the agent)". Passing the agent is what makes
+  the per-session tool count differ from the global one.
+- `agent/disposed` payload is `{ agent }`, emitted after driver quiescence and scoped
+  unwind — the deny mask is already gone, so only local bookkeeping needs cleaning.
+- `ctx.agents` (`ctx.inject(['agents'], …)`) exposes `list()` and `get(sessionId)`.
+  It is the only way to reach a session that existed before the plugin loaded, and it
+  is what makes a reload re-gate live sessions instead of leaving them unmasked.
 - A linked bundle directory cannot resolve `@deepseek-ai/dsh-tools`, so `defineTool`
   is imported optionally; `ctx.tools.register(plainDefinition)` works.
 - Client bundle format: `window.__ModuleLoader__.load({ id, factory })`, factory

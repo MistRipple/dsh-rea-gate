@@ -50,7 +50,7 @@ State lives in `$DSH_HOME/rea-gate.json`:
 
 ## How the gate works
 
-On `agent/created` the plugin reads the state file. For a workspace whose gate is closed it calls `agent.ctx.tools.restrict({ deny: [...] })` with the exact `mcp__rea__*` names currently registered, so those tools disappear from the model's tool list and stop costing schema tokens. Turning the gate on mid-session exposes them again without a restart.
+On `agent/created` the plugin reads the state file. For a workspace whose gate is closed it calls `agent.ctx.tools.restrict({ deny: [...] })` with the exact `mcp__rea__*` names currently registered, so those tools disappear from the model's tool list and stop costing schema tokens. Turning the gate on mid-session exposes them again without a restart. Reloading the plugin re-applies the saved policy to sessions that are already running, and a disposed session drops its bookkeeping.
 
 ## Permissions and side effects
 
