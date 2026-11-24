@@ -61,4 +61,6 @@
 | `/api/dsh-rea-gate/toggle` | POST | `{ action }` 支持 `install`、`reinstall`、`update`、`uninstall`（可选 `removePackage: true`）、`check-update`、`install-engine`（`engine`）、`set-env`（`values`）与 `reset-workspace`（`workspace`）。 |
 | `/api/dsh-rea-gate/diagnose` | GET | `graph.selfPresent` 表示宿主模块图中是否包含本插件。面板底部的 **高级诊断** 可直接查询。 |
 
+没有工作区目录的会话通过胶囊切换时只对当前会话生效，不会改动全局默认；此时显式传 `remember: true` 会被拒绝，因为无法保存工作区规则。
+
 实机挂载通过客户端 `Slots.listSubTree` 确认，查询 `sidebar.panellist` 的 occupants 是否包含 `rea-gate`。若重合成后仍显示旧面板，退出并重新打开 Desktop 以载入新版组件。

@@ -33,6 +33,13 @@ const ctx = {
   },
   effect: (effect) => effect(),
   inject: (services, callback) => {
+    if (services.includes('agents')) {
+      callback({
+        effect: (effect) => effect(),
+        agents: { get: () => undefined },
+      })
+      return
+    }
     assert.deepEqual(services, ['connection'])
     callback({
       effect: (effect) => effect(),

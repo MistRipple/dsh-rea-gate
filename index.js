@@ -335,6 +335,30 @@ export function apply(ctx) {
   /** session id -> { agent, workspace }, for the browser control */
   const sessions = new Map()
   const log = ctx.logger?.('dsh-rea-gate')
+  /** The host's live-agent table; used when a session predates a plugin reload. */
+  let liveAgents
+  ctx.inject(['agents'], (agentCtx) => {
+    liveAgents = agentCtx.agents
+    agentCtx.effect(() => () => {
+      if (liveAgents === agentCtx.agents) liveAgents = undefined
+    })
+    reconcileExistingAgents()
+  })
+
+  /** Resolve a session's agent from the creation cache or the host table. */
+  function sessionEntry(sessionId) {
+    if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined
+    const cached = sessions.get(sessionId)
+    if (cached) return cached
+    const agent = liveAgents?.get?.(sessionId)
+    if (!agent) return undefined
+    const entry = { agent, workspace: workspaceOf(agent) }
+    sessions.set(sessionId, entry)
+    // A lazily resolved session must match the policy before its state is read.
+    applyChoice(agent, isOpen(readState(), entry.workspace))
+    return entry
+  }
+
   let diagnosis = { report: null, cli: null, checkedAt: 0 }
   let diagnosing
   let maintenance
@@ -572,6 +596,23 @@ export function apply(ctx) {
     else closeGate(agent)
   }
 
+  /** Apply the saved policy to agents that existed before this plugin instance loaded. */
+  function reconcileExistingAgents() {
+    if (!liveAgents?.list) return
+    for (const agent of liveAgents.list()) {
+      try {
+        const sessionId = agent?.session?.header?.id
+        const workspace = workspaceOf(agent)
+        if (typeof sessionId === 'string' && !sessions.has(sessionId)) {
+          sessions.set(sessionId, { agent, workspace })
+        }
+        applyChoice(agent, isOpen(readState(), workspace))
+      } catch (error) {
+        log?.warn?.(`could not apply the REA gate to an existing session: ${error?.message ?? error}`)
+      }
+    }
+  }
+
   // The creation payload is { agent, source, signal }; only its `agent` has a ctx.
   ctx.on('agent/created', (...args) => {
     const agent = args[0]?.agent
@@ -595,7 +636,7 @@ export function apply(ctx) {
   }
 
   function stateFor(sessionId) {
-    const entry = sessionId ? sessions.get(sessionId) : undefined
+    const entry = sessionId ? sessionEntry(sessionId) : undefined
     const workspace = entry?.workspace ?? null
     const state = readState()
     const registered = reaNames(ctx).length
@@ -728,11 +769,14 @@ export function apply(ctx) {
                 (typeof body.workspace !== 'string' || body.workspace.length === 0 || body.session !== undefined)) {
               return json({ ok: false, message: 'Expected one workspace path.' }, 400)
             }
-            const entry = sessions.get(body.session)
+            if (body.remember !== undefined && typeof body.remember !== 'boolean') {
+              return json({ ok: false, message: 'Expected remember to be a boolean.' }, 400)
+            }
+            const entry = body.session !== undefined ? sessionEntry(body.session) : undefined
             if (body.session !== undefined && !entry) {
               return json({ ok: false, message: 'This session is not active in the host.' }, 404)
             }
-            if (body.remember !== undefined && (body.remember !== false || !entry)) {
+            if (body.remember === false && !entry) {
               return json({ ok: false, message: 'A temporary change requires an active session.' }, 400)
             }
             if (body.remember === false) {
@@ -740,6 +784,19 @@ export function apply(ctx) {
               return json({ ...stateFor(body.session), remembered: false, ok: true })
             }
             const workspace = body.workspace ?? entry?.workspace ?? null
+            // A session-scoped control with no workspace cannot be remembered.
+            // Apply it to that session instead of silently changing the global
+            // default; an explicit `remember: true` is rejected.
+            if (entry && workspace === null) {
+              if (body.remember === true) {
+                return json({
+                  ok: false,
+                  message: 'This session has no workspace directory; pass remember:false for a temporary change.',
+                }, 400)
+              }
+              applyChoice(entry.agent, body.open)
+              return json({ ...stateFor(body.session), remembered: false, ok: true })
+            }
             const saved = setOpen(workspace, body.open, entry?.agent)
             return json({
               ...stateFor(body.session),
