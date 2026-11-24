@@ -1,6 +1,6 @@
 {
   "name": "dsh-rea-gate",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Per-session gate for REA: keep the reverse-engineering toolset installed but expose it only in the sessions and workspaces that ask for it.",
   "license": "MIT",
   "author": "MistRipple",
@@ -23,6 +23,9 @@
   "engines": {
     "dsh": ">=0.2.3-alpha.2 <0.3.0-0"
   },
+  "scripts": {
+    "test": "node --test tests/"
+  },
   "type": "module",
   "exports": {
     ".": "./index.js",
@@ -33,6 +36,7 @@
   "files": [
     "index.js",
     "client.js",
+    "lib",
     "cordis.patch.yml",
     "locale/*.json",
     "docs",

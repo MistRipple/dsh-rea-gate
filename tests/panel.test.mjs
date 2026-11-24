@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apply, inject } from '../index.js'
@@ -172,19 +172,24 @@ assert.deepEqual(JSON.parse(readFileSync(stateFile, 'utf8')), {
   default: false,
   workspaces: { [openWorkspace]: false, [closedWorkspace]: false },
 })
-assert.deepEqual(active.ctx.visibleTools, toolNames)
+// A workspace rule changed from the panel reaches the sessions already running there.
+assert.deepEqual(active.ctx.visibleTools, ['other_tool'])
 assert.deepEqual(createAgent('new', openWorkspace).ctx.visibleTools, ['other_tool'])
 
 const session = await (await fetch('api/dsh-rea-gate/state?session=active')).json()
-assert.equal(session.open, true)
-assert.equal(session.tools, 1)
+assert.equal(session.open, false)
+assert.equal(session.tools, 0)
 const closed = await (await fetch('api/dsh-rea-gate/state?session=closed')).json()
 assert.equal(closed.installed, true)
 assert.equal(closed.registeredTools, 1)
 assert.equal(closed.tools, 0)
 
+// A model-initiated change is session-only: it must not rewrite the saved rule.
+const savedBefore = JSON.parse(readFileSync(stateFile, 'utf8')).workspaces[closedWorkspace]
 await gateTool.execute({ action: 'on' }, { agent: closedAgent })
 assert.deepEqual(closedAgent.ctx.visibleTools, toolNames)
+assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).workspaces[closedWorkspace], savedBefore)
+await gateTool.execute({ action: 'on', remember: true }, { agent: closedAgent })
 assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).workspaces[closedWorkspace], true)
 const sessionToggle = await fetch('api/dsh-rea-gate/toggle', {
   method: 'POST', body: JSON.stringify({ session: 'closed', open: false }),
@@ -234,14 +239,36 @@ assert.equal(unknownSession.status, 404)
 assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).default, true)
 
 // Engine env persistence via host route: trims quotes, persists in rea-gate.json, and clears cleanly.
-const savedEnvRes = await fetch('api/dsh-rea-gate/toggle', {
+const ghidraDir = join(stateDirectory, 'ghidra', 'libexec')
+mkdirSync(ghidraDir, { recursive: true })
+const post = (values) => fetch('api/dsh-rea-gate/toggle', {
   method: 'POST',
-  body: JSON.stringify({ action: 'set-env', values: { GHIDRA_INSTALL_DIR: ' "/opt/homebrew/opt/ghidra/libexec" ' } }),
+  body: JSON.stringify({ action: 'set-env', values }),
 })
+const savedEnvRes = await post({ GHIDRA_INSTALL_DIR: ` "${ghidraDir}" ` })
 assert.equal(savedEnvRes.status, 200)
 const savedEnvBody = await savedEnvRes.json()
-assert.equal(savedEnvBody.engines.find(({ id }) => id === 'ghidra').variables[0].value, '/opt/homebrew/opt/ghidra/libexec')
-assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).env.GHIDRA_INSTALL_DIR, '/opt/homebrew/opt/ghidra/libexec')
+assert.equal(savedEnvBody.engines.find(({ id }) => id === 'ghidra').variables[0].value, ghidraDir)
+assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).env.GHIDRA_INSTALL_DIR, ghidraDir)
+
+// Values REA would reject are refused before anything is saved.
+const toolFile = join(stateDirectory, 'apktool')
+writeFileSync(toolFile, '#!/bin/sh\n')
+for (const [values, pattern] of [
+  [{ REA_APKTOOL_COMMAND: 'apktool' }, /absolute path/],
+  [{ REA_APKTOOL_COMMAND: join(stateDirectory, 'missing') }, /does not exist/],
+  [{ REA_APKTOOL_COMMAND: stateDirectory }, /must point to a file/],
+  [{ GHIDRA_INSTALL_DIR: toolFile }, /must point to a directory/],
+  // One bad value rejects the whole request.
+  [{ REA_APKTOOL_COMMAND: toolFile, REA_ADB_PATH: 'adb' }, /absolute path/],
+]) {
+  const rejected = await post(values)
+  assert.equal(rejected.status, 400, JSON.stringify(values))
+  assert.match((await rejected.json()).message, pattern)
+}
+assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).env.REA_APKTOOL_COMMAND, undefined)
+const withHome = await post({ REA_APKTOOL_COMMAND: toolFile })
+assert.equal(withHome.status, 200)
 
 const badEnvRes = await fetch('api/dsh-rea-gate/toggle', {
   method: 'POST',
@@ -253,11 +280,11 @@ const badInstallerRes = await fetch('api/dsh-rea-gate/toggle', {
   method: 'POST',
   body: JSON.stringify({ action: 'install-engine', engine: 'ida' }),
 })
-assert.equal(badInstallerRes.status, 409)
+assert.equal(badInstallerRes.status, 400)
 
 const clearEnvRes = await fetch('api/dsh-rea-gate/toggle', {
   method: 'POST',
-  body: JSON.stringify({ action: 'set-env', values: { GHIDRA_INSTALL_DIR: '' } }),
+  body: JSON.stringify({ action: 'set-env', values: { GHIDRA_INSTALL_DIR: '', REA_APKTOOL_COMMAND: '' } }),
 })
 assert.equal(clearEnvRes.status, 200)
 assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).env, undefined)

@@ -23,7 +23,8 @@ Host (index.js)
                       └─ workspace closed → agent.ctx.tools.restrict({ deny: [names] })
   agent/disposed ──► forget the session's bookkeeping (the scope already lifted the mask)
   ctx.inject(['agents']) ──► re-apply the saved policy to agents that predate a reload
-  rea_gate tool  ──► status | on | off | install | update | uninstall
+  rea_gate tool  ──► status | on | off (session-only unless remember:true; no lifecycle actions)
+  sweep (5 s + every /state read) ──► top up masks when REA connects late, grows, or a restrict failed
   child plugin   ──► ctx.inject(['connection']) ──► exact /api routes
                      GET  /api/dsh-rea-gate/state?session=<id>&checks=0|1&refresh=0|1
                      POST /api/dsh-rea-gate/toggle  { open, session? } | { open, workspace } | { action }
@@ -66,6 +67,9 @@ State file `$DSH_HOME/rea-gate.json`:
 | Disposed session forgotten | `agent/disposed` drops the entry; `/state?session=` reports `sessionKnown: false` and toggle answers 404 |
 | Workspace-less chip | a session with no `cwd` toggles itself only; the global default and `rea-gate.json` stay unchanged |
 | `remember: true` | honoured with a workspace; rejected with a 400 when the session has no workspace |
+| Agent tool is read/flip only | `rea_gate` accepts `status`, `on`, `off`; install/update/uninstall are panel-only; `on`/`off` skip the state file unless `remember:true` (`gate-sweep` test) |
+| Late REA / failed restrict | closed sessions are re-masked by the sweep; `exposed` in `/state` and the chip's `REA 关（未生效）` report a leak (`gate-sweep` test) |
+| Uninstall scope | `rea uninstall` has no `--client` option (checked on 6.10.1), so it clears every client; the dialog and README say so |
 | First paint not blocked | a 1.2 s `rea doctor` still answers in <900 ms with `checks: "pending"`, then settles to `done` |
 | Chip follows other surfaces | polling picks up a change made through the panel or the `rea_gate` tool within 5 s |
 
@@ -118,9 +122,17 @@ A quit and reopen provides a fresh page boot. The session persists on disk.
 2. The `/diagnose` route reports whether the host composed the browser module.
    Both the sidebar and `plugins.bundle.config` keyed by package name provide the console.
 3. `docs/DETAIL.md` and `locale/` describe the workspace and engine controls.
-4. `sessions` is pruned on `agent/disposed` and on load; if a session ends without
-   that event the entry survives until the next reload. The chip polls, so a stale
-   indicator cannot outlive five seconds.
+4. `sessions` is pruned on `agent/disposed` and on load. A session that ends without
+   that event keeps its entry until the next reload, and `/state?session=` still
+   reports `sessionKnown: true` for it (when the host's agent table is injected, the
+   lookup re-checks it first, so a replaced agent is picked up). The chip polls only
+   while its page is visible, so it never shows a decision another surface reversed
+   for longer than one poll after the page is visible again.
+5. Unverified against a live DSH: whether a sub-agent reports the same
+   `session.header.id` as its parent, and whether it should inherit a parent's
+   session-only choice. The gate defends against the id clash (the first agent keeps
+   the chip's entry, a later one is still gated) but sub-agents do not inherit a
+   temporary `on`; they read the saved policy.
 
 ## API facts worth keeping
 
@@ -216,13 +228,16 @@ interface ConnectionFetchRoute {
 ## Repo layout
 
 ```
-index.js              host: gate, state, routes, REA CLI calls
-client.js             browser: sidebar panel, header chip, icon
+index.js              host: gate, sweep, owner routes, agent tool
+lib/state.js          saved policy, workspace keys (realpath, worktree, parent rules)
+lib/rea-cli.js        REA / npm / brew subprocess calls, Windows launcher handling
+lib/engines.js        engine env table, local probes, value validation
+client.js             browser: sidebar panel, header chip, icon, zh/en strings (one file: no build step)
 cordis.patch.yml      bundle patch (one row, id: rea-gate)
 package.json          dsh.bundle.patch + dsh.client
 locale/{en,zh}.json   display metadata
 docs/DETAIL.md        plugin detail page
-tests/*.test.mjs      component checks (mini React stand-in, no browser)
+tests/*.test.mjs      component and host checks (mini React stand-in, no browser); `npm test`
 ```
 
 ## Install / remove

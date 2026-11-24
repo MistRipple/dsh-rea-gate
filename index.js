@@ -7,14 +7,41 @@
  * mcp__rea__* definitions never reach that session's prompt. Opening the gate
  * disposes that mask, which takes effect immediately in the same session.
  *
- * Every step degrades safely: a gate that cannot resolve tool names hides
- * nothing rather than throwing inside agent creation.
+ * A gate that cannot hide anything yet (REA still connecting, a failed restrict
+ * call, tools added by an update) is retried by a sweep and reported through
+ * `exposed`, instead of silently leaving the session unmasked.
+ *
+ * Layout: lib/state.js is the saved policy and workspace keys, lib/rea-cli.js
+ * the REA/npm/brew calls, lib/engines.js engine settings; this file is the gate,
+ * the owner routes and the agent tool.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { randomUUID } from 'node:crypto'
-import { homedir } from 'node:os'
-import { delimiter, dirname, isAbsolute, join } from 'node:path'
-import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+
+import {
+  COMMANDS,
+  HEALTHY_REGISTRATION,
+  detectHomebrewPrefix,
+  effectiveEnv,
+  parseJsonOutput,
+  resolveNpmGlobalBin,
+  runCommand,
+} from './lib/rea-cli.js'
+import {
+  ALLOWED_ENGINE_ENV,
+  ENGINE_INSTALLERS,
+  doctorEngineState,
+  normalizeEnvValue,
+  probeJavaHome,
+} from './lib/engines.js'
+import {
+  canonicalWorkspace,
+  isInside,
+  isOpen,
+  readState,
+  ruleFor,
+  updateState,
+} from './lib/state.js'
 
 /**
  * A linked bundle directory cannot resolve the dsh installation's own packages,
@@ -27,90 +54,26 @@ try {
 } catch {}
 
 const PREFIX = 'mcp__rea__'
-const STATE_FILE = 'rea-gate.json'
-
-// These are the caller-supplied engine settings that REA reads from the
-// harness environment or cordis.patch.yml.
-const ENGINE_ENV = {
-  ghidra: ['GHIDRA_INSTALL_DIR', 'JAVA_HOME'],
-  hopper: ['HOPPER_LAUNCHER_PATH'],
-  ida: ['REA_IDA_MCP_CONFIG'],
-  jadx: ['REA_JADX_MCP_JAR', 'JAVA_HOME'],
-  apktool: ['REA_APKTOOL_COMMAND'],
-  adb: ['REA_ADB_PATH'],
-  kuna: ['REA_KUNA_COMMAND'],
-  java: ['JAVA_HOME'],
-}
-const ALLOWED_ENGINE_ENV = new Set(Object.values(ENGINE_ENV).flat())
-const ENGINE_INSTALLERS = {
-  ghidra: { args: ['install', 'ghidra'], label: 'brew install ghidra' },
-  java: { args: ['install', 'openjdk@21'], label: 'brew install openjdk@21' },
-  apktool: { args: ['install', 'apktool'], label: 'brew install apktool' },
-  adb: { args: ['install', '--cask', 'android-platform-tools'], label: 'brew install --cask android-platform-tools' },
-}
-const COMMANDS = {
-  install: ['setup', '--client', 'dsh', '--yes'],
-  reinstall: ['setup', '--client', 'dsh', '--yes'],
-  update: ['update'],
-  uninstall: ['uninstall'],
-}
 const DOCTOR_TTL = 30_000
+// How often closed sessions are checked for REA tools that appeared after them.
+const SWEEP_MS = 5_000
 // The panel's first paint must not wait for a slow `rea doctor`. A bounded wait
 // returns the cached view with `checks: 'pending'`, and the browser re-reads
 // once the run settles.
 const DOCTOR_WAIT_MS = Number(process.env.REA_GATE_DOCTOR_WAIT_MS ?? 2_500) || 2_500
+/** Survives a plugin reload because it lives on the agent, not in this closure. */
+const CHOICE = Symbol.for('dsh-rea-gate.choice')
 
 export const name = 'dsh-rea-gate'
 export const inject = ['tools']
 
-function statePath() {
-  const home = process.env.DSH_HOME || join(homedir(), '.dsh')
-  return join(home, STATE_FILE)
+/** Messages shown in the panel follow the browser's language; the rest is English. */
+function translator(request) {
+  const header = request?.headers?.get?.('accept-language') ?? ''
+  const zh = /^\s*zh/i.test(header)
+  return (chinese, english) => (zh ? chinese : english)
 }
-
-function readState() {
-  try {
-    const parsed = JSON.parse(readFileSync(statePath(), 'utf8'))
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const workspaces = Object.create(null)
-      if (parsed.workspaces && typeof parsed.workspaces === 'object' && !Array.isArray(parsed.workspaces)) {
-        for (const [path, open] of Object.entries(parsed.workspaces)) {
-          if (path !== '') workspaces[path] = open === true
-        }
-      }
-      const env = Object.create(null)
-      if (parsed.env && typeof parsed.env === 'object' && !Array.isArray(parsed.env)) {
-        for (const [key, value] of Object.entries(parsed.env)) {
-          if (ALLOWED_ENGINE_ENV.has(key) && typeof value === 'string' && value.trim()) {
-            env[key] = value.trim()
-          }
-        }
-      }
-      return { default: parsed.default === true, workspaces, env }
-    }
-  } catch {}
-  return { default: false, workspaces: Object.create(null), env: Object.create(null) }
-}
-
-function writeState(state) {
-  const file = statePath()
-  const temporary = `${file}.${randomUUID()}.tmp`
-  const payload = {
-    default: state.default === true,
-    workspaces: state.workspaces ?? {},
-  }
-  const envEntries = Object.entries(state.env ?? {}).filter(([k, v]) => ALLOWED_ENGINE_ENV.has(k) && typeof v === 'string' && v.trim())
-  if (envEntries.length > 0) payload.env = Object.fromEntries(envEntries)
-  try {
-    mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600, flag: 'wx' })
-    renameSync(temporary, file)
-    return true
-  } catch {
-    try { rmSync(temporary, { force: true }) } catch {}
-    return false
-  }
-}
+const english = (_chinese, text) => text
 
 /** The directory the session works in; the key its choice is remembered under. */
 function workspaceOf(agent) {
@@ -122,164 +85,10 @@ function workspaceOf(agent) {
     agent?.cwd,
   ]
   for (const value of candidates) {
-    if (typeof value === 'string' && value.length > 0) return value
+    const key = typeof value === 'string' && value.length > 0 ? canonicalWorkspace(value) : null
+    if (key) return key
   }
   return null
-}
-
-function isOpen(state, workspace) {
-  if (workspace && Object.hasOwn(state.workspaces, workspace)) {
-    return state.workspaces[workspace] === true
-  }
-  return state.default === true
-}
-
-function effectiveEnv(state, extra = {}) {
-  return { ...process.env, ...(state?.env ?? {}), ...extra }
-}
-
-function detectHomebrewPrefix() {
-  if (process.env.REA_GATE_SKIP_DOCTOR === '1') return null
-  if (process.platform !== 'darwin') return null
-  for (const prefix of ['/opt/homebrew', '/usr/local']) {
-    if (existsSync(join(prefix, 'bin', 'brew'))) return prefix
-  }
-  return null
-}
-
-function findBinary(command, extraDirs = []) {
-  if (command === 'rea' && process.env.REA_BIN) return process.env.REA_BIN
-  const searchDirs = [
-    ...extraDirs.filter(Boolean),
-    '/opt/homebrew/bin',
-    '/usr/local/bin',
-    dirname(process.execPath),
-    ...(process.env.PATH ? process.env.PATH.split(delimiter) : []),
-  ]
-  const seen = new Set()
-  for (const dir of searchDirs) {
-    if (!dir || seen.has(dir)) continue
-    seen.add(dir)
-    const candidate = join(dir, command)
-    if (existsSync(candidate)) return candidate
-  }
-  return command
-}
-
-function probeJavaHome(env, brewPrefix) {
-  const configured = env.JAVA_HOME?.trim()
-  if (configured && existsSync(join(configured, 'bin', 'java'))) {
-    return { available: true, home: configured, configured: true }
-  }
-  const candidates = []
-  if (brewPrefix) {
-    const optDir = join(brewPrefix, 'opt')
-    try {
-      const jdkDirs = readdirSync(optDir)
-        .filter((name) => name === 'openjdk' || /^openjdk@\d+$/.test(name))
-        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
-      for (const dir of jdkDirs) {
-        candidates.push(join(optDir, dir, 'libexec/openjdk.jdk/Contents/Home'))
-      }
-    } catch {}
-  }
-  try {
-    for (const dir of readdirSync('/Library/Java/JavaVirtualMachines')) {
-      candidates.push(join('/Library/Java/JavaVirtualMachines', dir, 'Contents/Home'))
-    }
-  } catch {}
-  for (const home of candidates) {
-    if (existsSync(join(home, 'bin', 'java'))) {
-      return { available: true, home, configured: Boolean(configured) }
-    }
-  }
-  return { available: false, home: null, configured: Boolean(configured) }
-}
-
-function engineState(state, brewPrefix) {
-  const savedEnv = state?.env ?? {}
-  const merged = effectiveEnv(state)
-  return Object.entries(ENGINE_ENV).map(([id, names]) => {
-    const variables = names.map((varName) => {
-      const savedValue = savedEnv[varName] ?? null
-      const hostSet = Boolean(process.env[varName]?.trim())
-      return {
-        name: varName,
-        set: Boolean(savedValue || hostSet),
-        value: savedValue,
-        fromHostEnv: Boolean(!savedValue && hostSet),
-      }
-    })
-    const installer = ENGINE_INSTALLERS[id]
-    return {
-      id,
-      configured: variables[0].set,
-      variables,
-      canInstall: Boolean(installer && brewPrefix),
-      installCommand: installer?.label ?? null,
-    }
-  })
-}
-
-function parseJsonOutput(result) {
-  if (!result?.out) return null
-  try {
-    const parsed = JSON.parse(result.out)
-    return parsed?.data ?? parsed
-  } catch {
-    return null
-  }
-}
-
-function doctorEngineState(doctor, state, brewPrefix) {
-  const skipLocalProbe = process.env.REA_GATE_SKIP_DOCTOR === '1'
-  const merged = effectiveEnv(state)
-  const inspections = new Map((doctor?.providerInspections ?? []).map((item) => [item.id, item]))
-  return engineState(state, brewPrefix).map((engine) => {
-    const inspection = inspections.get(engine.id)
-    const checks = inspection?.checks ?? doctor?.checks?.filter((item) => item.name === engine.id) ?? []
-    if (inspection || checks.length > 0) {
-      return {
-        ...engine,
-        checked: true,
-        configured: inspection?.configured ?? engine.configured,
-        available: inspection?.available ?? checks.every((item) => item.ok === true),
-        version: inspection?.providerVersion ?? null,
-        checks: checks.map(({ name, ok, detail, remediation }) => ({ name, ok: ok === true, detail, remediation })),
-      }
-    }
-    if (skipLocalProbe) return engine
-    if (engine.id === 'java') {
-      const probed = probeJavaHome(merged, brewPrefix)
-      return {
-        ...engine,
-        checked: true,
-        configured: probed.configured || probed.available,
-        available: probed.available,
-        checks: probed.available
-          ? [{ name: 'java', ok: true, detail: probed.home, remediation: null }]
-          : [{ name: 'java', ok: false, detail: '未检测到可用的 JDK（JAVA_HOME 与系统/Homebrew 均未找到）。', remediation: null }],
-      }
-    }
-    if (engine.id === 'apktool' || engine.id === 'adb') {
-      const envKey = ENGINE_ENV[engine.id][0]
-      const configuredCmd = merged[envKey]?.trim()
-      const candidate = configuredCmd || findBinary(engine.id)
-      const found = isAbsolute(candidate) && existsSync(candidate)
-      return {
-        ...engine,
-        checked: true,
-        configured: Boolean(configuredCmd) || found,
-        available: found,
-        checks: found
-          ? [{ name: engine.id, ok: true, detail: candidate, remediation: null }]
-          : configuredCmd
-            ? [{ name: engine.id, ok: false, detail: `未找到指定路径：${configuredCmd}`, remediation: null }]
-            : [],
-      }
-    }
-    return engine
-  })
 }
 
 /** REA tool names visible in one scope, discovered instead of hardcoded. */
@@ -298,43 +107,24 @@ function reaNames(ctx, scope) {
   return []
 }
 
-function runCommand(command, args, timeout = 180_000, options = {}) {
-  const extraDirs = options.extraDirs ?? []
-  const executable = findBinary(command, extraDirs)
-  const baseEnv = options.env ?? process.env
-  const pathParts = [
-    ...extraDirs,
-    isAbsolute(executable) ? dirname(executable) : null,
-    '/opt/homebrew/bin',
-    '/usr/local/bin',
-    dirname(process.execPath),
-    baseEnv.PATH,
-  ].filter(Boolean)
-  const env = { ...baseEnv, PATH: [...new Set(pathParts)].join(delimiter) }
-  return new Promise((resolve) => {
-    execFile(executable, args, { env, timeout, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
-      resolve({
-        ok: !error,
-        code: error?.code ?? 0,
-        out: String(stdout ?? '').trim(),
-        err: String(stderr ?? '').trim() || error?.message || '',
-      })
-    })
-  })
-}
-
-async function resolveNpmGlobalBin() {
-  const result = await runCommand('npm', ['prefix', '-g'], 15_000)
-  if (!result.ok || !result.out) return null
-  const prefix = result.out.split(/\r?\n/)[0]?.trim()
-  if (!prefix) return null
-  return process.platform === 'win32' ? prefix : join(prefix, 'bin')
+/** Join two command results into one, as if they had been a single step. */
+function chain(first, second) {
+  return {
+    ok: second.ok,
+    code: second.code,
+    out: [first.out, second.out].filter(Boolean).join('\n'),
+    err: [first.err, second.err].filter(Boolean).join('\n'),
+  }
 }
 
 export function apply(ctx) {
-  /** agent -> disposer that lifts the deny mask */
+  /** agent -> disposers that lift its deny masks (one per closeGate top-up) */
   const gates = new Map()
-  /** The policy applied to each agent, independently of later workspace edits. */
+  /** agents whose choice is "closed"; the sweep keeps their masks complete */
+  const closedAgents = new Set()
+  /** closed agents that could not be fully masked yet */
+  const pendingGates = new Set()
+  /** agent -> { open, temporary }; mirrored on the agent so a reload keeps it */
   const agentChoices = new WeakMap()
   /** session id -> { agent, workspace }, for the browser control */
   const sessions = new Map()
@@ -349,17 +139,33 @@ export function apply(ctx) {
     reconcileExistingAgents()
   })
 
-  /** Resolve a session's agent from the creation cache or the host table. */
+  function getChoice(agent) {
+    return agentChoices.get(agent) ?? agent?.[CHOICE]
+  }
+
+  function setChoice(agent, choice) {
+    agentChoices.set(agent, choice)
+    try {
+      Object.defineProperty(agent, CHOICE, { value: choice, configurable: true, writable: true, enumerable: false })
+    } catch {}
+  }
+
+  /**
+   * Resolve a session's agent. The host table is the truth when it is
+   * available: a cached entry for the same id may point at a different agent
+   * (a sub-agent created later, or a session whose agent was replaced).
+   */
   function sessionEntry(sessionId) {
     if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined
     const cached = sessions.get(sessionId)
-    if (cached) return cached
-    const agent = liveAgents?.get?.(sessionId)
+    const live = liveAgents?.get?.(sessionId)
+    if (cached && (!live || live === cached.agent)) return cached
+    const agent = live ?? cached?.agent
     if (!agent) return undefined
     const entry = { agent, workspace: workspaceOf(agent) }
     sessions.set(sessionId, entry)
     // A lazily resolved session must match the policy before its state is read.
-    applyChoice(agent, isOpen(readState(), entry.workspace))
+    if (!getChoice(agent)) applyChoice(agent, isOpen(readState(), entry.workspace))
     return entry
   }
 
@@ -372,13 +178,12 @@ export function apply(ctx) {
     if (diagnosing) return diagnosing
     if (!force && Date.now() - diagnosis.checkedAt < DOCTOR_TTL) return Promise.resolve(diagnosis)
     const env = effectiveEnv(readState())
-    diagnosing = runCommand('rea', ['doctor', '--client', 'dsh', '--format', 'json'], 30_000, { env, extraDirs })
+    const doctor = ['doctor', '--client', 'dsh', '--format', 'json']
+    diagnosing = runCommand('rea', doctor, 30_000, { env, extraDirs })
       .then(async (result) => {
         if (result.code === 'ENOENT' && extraDirs.length === 0) {
           const npmBin = await resolveNpmGlobalBin()
-          if (npmBin) {
-            result = await runCommand('rea', ['doctor', '--client', 'dsh', '--format', 'json'], 30_000, { env, extraDirs: [npmBin] })
-          }
+          if (npmBin) result = await runCommand('rea', doctor, 30_000, { env, extraDirs: [npmBin] })
         }
         const report = parseJsonOutput(result)
         const cli = report ? 'available' : result.code === 'ENOENT' ? 'missing' : 'unavailable'
@@ -406,17 +211,29 @@ export function apply(ctx) {
 
   async function syncRegistrationWithEnv(state, extraDirs = []) {
     if (process.env.REA_GATE_SKIP_DOCTOR === '1') return { ok: true, out: '', err: '' }
-    const env = effectiveEnv(state)
-    return runCommand('rea', COMMANDS.install, 180_000, { env, extraDirs })
+    return runCommand('rea', COMMANDS.install, 180_000, { env: effectiveEnv(state), extraDirs })
   }
 
-  async function maintain(action, options = {}) {
+  /**
+   * Run one maintenance task at a time. Installs, updates and brew runs change
+   * global state, so a second request while one is running is refused rather
+   * than queued.
+   */
+  async function exclusive(task, tr) {
     if (maintenance) {
-      return { ok: false, message: 'Another REA maintenance action is already running.' }
+      return { ok: false, busy: true, message: tr('已有另一项 REA 维护操作正在运行。', 'Another REA maintenance action is already running.') }
     }
-    maintenance = (async () => {
-      const state = readState()
-      const env = effectiveEnv(state)
+    maintenance = task()
+    try {
+      return await maintenance
+    } finally {
+      maintenance = undefined
+    }
+  }
+
+  function maintain(action, options = {}, tr = english) {
+    return exclusive(async () => {
+      const env = effectiveEnv(readState())
       let extraDirs = []
       let result
 
@@ -425,13 +242,7 @@ export function apply(ctx) {
         if (result.ok) {
           const npmBin = await resolveNpmGlobalBin()
           if (npmBin) extraDirs = [npmBin]
-          const setupResult = await runCommand('rea', COMMANDS.install, 180_000, { env, extraDirs })
-          result = {
-            ok: setupResult.ok,
-            code: setupResult.code,
-            out: [result.out, setupResult.out].filter(Boolean).join('\n'),
-            err: [result.err, setupResult.err].filter(Boolean).join('\n'),
-          }
+          result = chain(result, await runCommand('rea', COMMANDS.install, 180_000, { env, extraDirs }))
         }
       } else if (action === 'uninstall') {
         result = await runCommand('rea', COMMANDS.uninstall, 180_000, { env })
@@ -439,13 +250,7 @@ export function apply(ctx) {
           result = { ok: true, code: 0, out: '', err: '' }
         }
         if (result.ok && options.removePackage) {
-          const removeResult = await runCommand('npm', ['uninstall', '--global', 'rea-agents'], 180_000, { env })
-          result = {
-            ok: removeResult.ok,
-            code: removeResult.code,
-            out: [result.out, removeResult.out].filter(Boolean).join('\n'),
-            err: [result.err, removeResult.err].filter(Boolean).join('\n'),
-          }
+          result = chain(result, await runCommand('npm', ['uninstall', '--global', 'rea-agents'], 180_000, { env }))
         }
       } else {
         result = await runCommand('rea', COMMANDS[action], 180_000, { env })
@@ -454,13 +259,7 @@ export function apply(ctx) {
           if (npmResult.ok) {
             const npmBin = await resolveNpmGlobalBin()
             if (npmBin) extraDirs = [npmBin]
-            const setupResult = await runCommand('rea', COMMANDS.install, 180_000, { env, extraDirs })
-            result = {
-              ok: setupResult.ok,
-              code: setupResult.code,
-              out: [npmResult.out, setupResult.out].filter(Boolean).join('\n'),
-              err: [npmResult.err, setupResult.err].filter(Boolean).join('\n'),
-            }
+            result = chain(npmResult, await runCommand('rea', COMMANDS.install, 180_000, { env, extraDirs }))
           } else {
             result = npmResult
           }
@@ -471,25 +270,17 @@ export function apply(ctx) {
       await inspectRea(true, extraDirs)
       const output = (result.ok ? result.out || result.err : result.err || result.out).slice(0, 12_000)
       return { ok: result.ok, message: output }
-    })()
-    try {
-      return await maintenance
-    } finally {
-      maintenance = undefined
-    }
+    }, tr)
   }
 
-  async function installEngine(engineId) {
+  async function installEngine(engineId, tr = english) {
     const installer = Object.hasOwn(ENGINE_INSTALLERS, engineId) ? ENGINE_INSTALLERS[engineId] : null
-    if (!installer) return { ok: false, message: `Unsupported engine installer: ${engineId}` }
+    if (!installer) return { ok: false, status: 400, message: `Unsupported engine installer: ${engineId}` }
     const brewPrefix = detectHomebrewPrefix()
     if (!brewPrefix) {
-      return { ok: false, message: '未检测到 Homebrew，请点击官方链接手动安装并配置路径。' }
+      return { ok: false, status: 409, message: tr('未检测到 Homebrew，请点击官方链接手动安装并配置路径。', 'Homebrew was not found. Use the official link to install the engine and set its path by hand.') }
     }
-    if (maintenance) {
-      return { ok: false, message: 'Another REA maintenance action is already running.' }
-    }
-    maintenance = (async () => {
+    return exclusive(async () => {
       const brewResult = await runCommand('brew', installer.args, 600_000)
       if (!brewResult.ok) {
         const output = (brewResult.err || brewResult.out).slice(0, 12_000)
@@ -520,9 +311,8 @@ export function apply(ctx) {
 
       const logs = [brewResult.out].filter(Boolean)
       if (Object.keys(discovered).length > 0) {
-        state.env = { ...state.env, ...discovered }
-        writeState(state)
-        const sync = await syncRegistrationWithEnv(state)
+        updateState((current) => { current.env = { ...current.env, ...discovered } })
+        const sync = await syncRegistrationWithEnv(readState())
         if (!sync.ok && sync.code !== 'ENOENT') {
           logs.push(sync.err || sync.out)
         }
@@ -530,46 +320,43 @@ export function apply(ctx) {
       await diagnosing
       await inspectRea(true)
       return { ok: true, message: logs.join('\n').slice(0, 12_000) }
-    })()
-    try {
-      return await maintenance
-    } finally {
-      maintenance = undefined
-    }
+    }, tr)
   }
 
-  async function setEngineEnv(values) {
+  async function setEngineEnv(values, tr = english) {
     if (!values || typeof values !== 'object' || Array.isArray(values)) {
-      return { ok: false, message: 'Expected an environment mapping.' }
+      return { ok: false, status: 400, message: 'Expected an environment mapping.' }
     }
     const entries = Object.entries(values)
-    if (entries.length === 0) return { ok: false, message: 'No environment variables provided.' }
-    for (const [key, value] of entries) {
-      if (!ALLOWED_ENGINE_ENV.has(key) || typeof value !== 'string') {
-        return { ok: false, message: `Unsupported environment variable: ${key}` }
+    if (entries.length === 0) return { ok: false, status: 400, message: 'No environment variables provided.' }
+    // Validate everything before saving anything: a bad value must not leave a
+    // half-applied change behind.
+    const cleaned = {}
+    for (const [key, raw] of entries) {
+      if (!ALLOWED_ENGINE_ENV.has(key) || typeof raw !== 'string') {
+        return { ok: false, status: 400, message: `Unsupported environment variable: ${key}` }
       }
+      const checked = normalizeEnvValue(key, raw, tr)
+      if (!checked.ok) return { ok: false, status: 400, message: checked.message }
+      cleaned[key] = checked.value
     }
-    if (maintenance) {
-      return { ok: false, message: 'Another REA maintenance action is already running.' }
-    }
-    maintenance = (async () => {
-      const state = readState()
-      let hasNonEmpty = false
-      for (const [key, raw] of entries) {
-        const cleaned = raw.trim().replace(/^(['"])(.*)\1$/, '$2').trim()
-        if (cleaned) {
-          state.env[key] = cleaned
-          hasNonEmpty = true
-        } else {
-          delete state.env[key]
+    return exclusive(async () => {
+      let changed = false
+      const saved = updateState((state) => {
+        for (const [key, value] of Object.entries(cleaned)) {
+          if ((state.env[key] ?? '') === value) continue
+          changed = true
+          if (value) state.env[key] = value
+          else delete state.env[key]
         }
-      }
-      if (!writeState(state)) {
-        return { ok: false, message: 'Could not save the engine environment settings.' }
+      })
+      if (!saved) {
+        return { ok: false, message: tr('无法保存引擎环境变量配置。', 'Could not save the engine environment settings.') }
       }
       let syncNote = ''
-      if (hasNonEmpty) {
-        const sync = await syncRegistrationWithEnv(state)
+      // Clearing a value changes the registration just as much as setting one.
+      if (changed) {
+        const sync = await syncRegistrationWithEnv(readState())
         if (!sync.ok && sync.code !== 'ENOENT') {
           syncNote = (sync.err || sync.out).slice(0, 4_000)
         }
@@ -577,42 +364,104 @@ export function apply(ctx) {
       await diagnosing
       await inspectRea(true)
       return { ok: true, message: syncNote }
-    })()
-    try {
-      return await maintenance
-    } finally {
-      maintenance = undefined
-    }
+    }, tr)
   }
 
+  /**
+   * Make sure a closed agent cannot see any REA tool. The first call masks every
+   * registered REA name (so the local mask holds even if an ancestor already
+   * hides them); later calls only add the names that have appeared or leaked
+   * since. Returns true when nothing is left to hide, false when the agent
+   * still needs another attempt.
+   */
   function closeGate(agent) {
-    if (gates.has(agent)) return gates.get(agent)
-    // Keep a local mask even if an ancestor already hides these global tools.
-    const names = reaNames(ctx)
-    if (names.length === 0) return null
+    const masks = gates.get(agent) ?? []
+    const names = masks.length === 0 ? reaNames(ctx) : reaNames(ctx, agent)
+    if (names.length === 0) {
+      // Either the agent is already fully hidden, or REA is not registered yet
+      // (the MCP server connects after startup or after an update). In the
+      // second case the sweep retries once the tools show up.
+      if (masks.length === 0) {
+        log?.warn?.('REA tools are not registered yet; the gate will close once they appear')
+        pendingGates.add(agent)
+        return false
+      }
+      pendingGates.delete(agent)
+      return true
+    }
     try {
-      const dispose = agent.ctx.tools.restrict({ deny: names })
-      gates.set(agent, dispose)
-      return dispose
+      masks.push(agent.ctx.tools.restrict({ deny: names }))
+      gates.set(agent, masks)
+      pendingGates.delete(agent)
+      return true
     } catch (error) {
       log?.warn?.(`could not hide REA tools: ${error?.message ?? error}`)
-      return null
+      pendingGates.add(agent)
+      return false
     }
   }
 
   function openGate(agent) {
-    const dispose = gates.get(agent)
-    if (!dispose) return
-    try {
-      dispose()
-    } catch {}
+    pendingGates.delete(agent)
+    closedAgents.delete(agent)
+    const masks = gates.get(agent)
+    if (!masks) return
+    for (const dispose of masks) {
+      try {
+        dispose()
+      } catch {}
+    }
     gates.delete(agent)
   }
 
-  function applyChoice(agent, open) {
-    agentChoices.set(agent, open)
-    if (open) openGate(agent)
-    else closeGate(agent)
+  /** `temporary` marks a choice that must not be replaced by the saved policy on reload. */
+  function applyChoice(agent, open, { temporary = false } = {}) {
+    setChoice(agent, { open, temporary })
+    if (open) {
+      openGate(agent)
+    } else {
+      closedAgents.add(agent)
+      closeGate(agent)
+    }
+  }
+
+  /**
+   * Re-close agents whose mask is missing tools: REA connected after the agent
+   * was created, a restrict call failed, or an update added new tools. Runs only
+   * when the registered REA tool set changed or an earlier attempt failed.
+   */
+  let sweptSignature = null
+  function sweepGates(registered = reaNames(ctx)) {
+    const signature = registered.join('\n')
+    if (signature === sweptSignature && pendingGates.size === 0) return
+    sweptSignature = signature
+    for (const agent of [...closedAgents]) closeGate(agent)
+  }
+
+  /** Every agent this instance knows about: created ones and the host's live table. */
+  function knownAgents() {
+    const agents = new Set()
+    for (const { agent } of sessions.values()) agents.add(agent)
+    try {
+      for (const agent of liveAgents?.list?.() ?? []) agents.add(agent)
+    } catch {}
+    return agents
+  }
+
+  /**
+   * After a workspace rule changes, bring every live session at or below that
+   * directory in line with it, not only the one the change came from.
+   */
+  function reapplyWorkspace(workspace) {
+    const state = readState()
+    for (const agent of knownAgents()) {
+      try {
+        const where = workspaceOf(agent)
+        if (where && isInside(where, workspace)) applyChoice(agent, isOpen(state, where))
+      } catch (error) {
+        log?.warn?.(`could not apply the REA rule to a running session: ${error?.message ?? error}`)
+      }
+    }
   }
 
   /** Apply the saved policy to agents that existed before this plugin instance loaded. */
@@ -637,7 +486,10 @@ export function apply(ctx) {
         if (typeof sessionId === 'string' && !sessions.has(sessionId)) {
           sessions.set(sessionId, { agent, workspace })
         }
-        applyChoice(agent, isOpen(readState(), workspace))
+        // A session-only choice made before the reload is still the user's choice.
+        const previous = getChoice(agent)
+        if (previous?.temporary) applyChoice(agent, previous.open, { temporary: true })
+        else applyChoice(agent, isOpen(readState(), workspace))
       } catch (error) {
         log?.warn?.(`could not apply the REA gate to an existing session: ${error?.message ?? error}`)
       }
@@ -651,6 +503,8 @@ export function apply(ctx) {
    */
   function forgetAgent(agent) {
     gates.delete(agent)
+    closedAgents.delete(agent)
+    pendingGates.delete(agent)
     const sessionId = agent?.session?.header?.id
     if (typeof sessionId !== 'string') return
     const entry = sessions.get(sessionId)
@@ -664,9 +518,13 @@ export function apply(ctx) {
     try {
       const workspace = workspaceOf(agent)
       const sessionId = agent?.session?.header?.id
-      if (typeof sessionId === 'string') sessions.set(sessionId, { agent, workspace })
+      // The first agent of a session owns the entry; a later agent that reports
+      // the same id (a sub-agent) is still gated but must not displace it.
+      if (typeof sessionId === 'string' && !sessions.has(sessionId)) sessions.set(sessionId, { agent, workspace })
       applyChoice(agent, isOpen(readState(), workspace))
-    } catch {}
+    } catch (error) {
+      log?.warn?.(`could not apply the REA gate to a new session: ${error?.message ?? error}`)
+    }
   })
 
   // The disposal payload is `{ agent }`, like creation.
@@ -678,22 +536,46 @@ export function apply(ctx) {
     } catch {}
   })
 
-  /** Persist a default or workspace choice and optionally apply it to one agent. */
+  /**
+   * Persist a default or workspace choice. A workspace choice reaches every
+   * live session in that workspace; the global default only governs sessions
+   * created afterwards, so flipping it never changes a running conversation's
+   * tool list.
+   */
   function setOpen(workspace, open, agent) {
-    const state = readState()
-    if (workspace) state.workspaces[workspace] = open
-    else state.default = open
-    const saved = writeState(state)
+    const saved = updateState((state) => {
+      if (workspace) state.workspaces[workspace] = open
+      else state.default = open
+    })
+    if (workspace && saved) reapplyWorkspace(workspace)
     if (agent) applyChoice(agent, open)
     return saved
   }
 
-  function stateFor(sessionId) {
+  /**
+   * Where a session-triggered save goes: the directory whose rule already
+   * governs this session (so every session under that rule moves together),
+   * or the session's own directory when no rule exists yet.
+   */
+  function ruleTarget(workspace) {
+    return ruleFor(readState(), workspace)?.path ?? workspace
+  }
+
+  function resetWorkspace(workspace) {
+    const saved = updateState((state) => { delete state.workspaces[workspace] })
+    if (saved) reapplyWorkspace(workspace)
+    return saved
+  }
+
+  function stateFor(sessionId, tr = english) {
     const entry = sessionId ? sessionEntry(sessionId) : undefined
     const workspace = entry?.workspace ?? null
     const state = readState()
-    const registered = reaNames(ctx).length
+    const registeredNames = reaNames(ctx)
+    sweepGates(registeredNames)
+    const registered = registeredNames.length
     const tools = entry?.agent ? reaNames(ctx, entry.agent).length : 0
+    const open = (entry?.agent && getChoice(entry.agent)?.open) ?? isOpen(state, workspace)
     const { report, cli, checkedAt } = diagnosis
     const identity = report?.identity
     const registration = (identity?.registrations ?? report?.registrations)?.find((item) => item.client === 'dsh')
@@ -703,8 +585,12 @@ export function apply(ctx) {
       : Boolean(registration || registered > 0 || tools > 0)
     const brewPrefix = detectHomebrewPrefix()
     return {
-      open: (entry?.agent && agentChoices.get(entry.agent)) ?? isOpen(state, workspace),
+      open,
+      // The gate is closed but the session can still see REA tools.
+      exposed: open === false && tools > 0,
       workspace,
+      // Where the session's rule comes from when it is inherited from a parent directory.
+      ruleSource: ruleFor(state, workspace)?.path ?? null,
       installed,
       registeredTools: registered,
       tools,
@@ -712,7 +598,11 @@ export function apply(ctx) {
       checkedAt: checkedAt || null,
       version: identity?.cli_package_version ?? null,
       registration: registration
-        ? { state: registration.state, path: registration.config_path ?? null }
+        ? {
+          state: registration.state,
+          path: registration.config_path ?? null,
+          healthy: HEALTHY_REGISTRATION.has(registration.state),
+        }
         : null,
       doctor: report
         ? { liveServer: liveServer?.state ?? 'unknown' }
@@ -722,8 +612,8 @@ export function apply(ctx) {
       capabilities: { homebrew: Boolean(brewPrefix) },
       workspaces: Object.entries(state.workspaces)
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([path, open]) => ({ path, open: open === true })),
-      engines: doctorEngineState(report, state, brewPrefix),
+        .map(([path, rule]) => ({ path, open: rule === true, missing: !existsSync(path) })),
+      engines: doctorEngineState(report, state, brewPrefix, tr),
     }
   }
 
@@ -738,6 +628,8 @@ export function apply(ctx) {
     const json = (body, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
     const url = (request) => new URL(request.url ?? '/', 'http://rea-gate.invalid')
+    /** A failed command is a server-side failure; an overlapping request is a conflict. */
+    const outcomeStatus = (result) => (result.ok ? 200 : result.busy ? 409 : result.status ?? 500)
 
     // An exact route is reached only by owner Peers and only after the carrier's
     // Host/Origin and cookie checks, so it needs no rejection fence of its own.
@@ -757,7 +649,7 @@ export function apply(ctx) {
             const settled = checks
               ? await inspectReaWithin(params.get('refresh') === '1', DOCTOR_WAIT_MS)
               : true
-            return json({ ...(await stateFor(session)), checks: settled ? 'done' : 'pending' })
+            return json({ ...stateFor(session, translator(request)), checks: settled ? 'done' : 'pending' })
           },
         }),
       'dsh-rea-gate: state route',
@@ -794,32 +686,35 @@ export function apply(ctx) {
           methods: ['POST'],
           requestBody: 'buffered',
           fetch: async (request) => {
+            const tr = translator(request)
             const body = await request.json().catch(() => null)
             if (typeof body?.action === 'string' && Object.hasOwn(COMMANDS, body.action)) {
-              const result = await maintain(body.action, { removePackage: body.removePackage === true })
+              const result = await maintain(body.action, { removePackage: body.removePackage === true }, tr)
               const sessionId = typeof body?.session === 'string' ? body.session : undefined
-              return json({ ...stateFor(sessionId), ...result }, result.ok ? 200 : 409)
+              return json({ ...stateFor(sessionId, tr), ...result }, outcomeStatus(result))
             }
             if (body?.action === 'install-engine' && typeof body.engine === 'string') {
-              const result = await installEngine(body.engine)
-              return json({ ...stateFor(), ...result }, result.ok ? 200 : 409)
+              const result = await installEngine(body.engine, tr)
+              return json({ ...stateFor(undefined, tr), ...result }, outcomeStatus(result))
             }
             if (body?.action === 'set-env' && body.values && typeof body.values === 'object') {
-              const result = await setEngineEnv(body.values)
-              return json({ ...stateFor(), ...result }, result.ok ? 200 : 400)
+              const result = await setEngineEnv(body.values, tr)
+              return json({ ...stateFor(undefined, tr), ...result }, outcomeStatus(result))
             }
             if (body?.action === 'reset-workspace' && typeof body.workspace === 'string' && body.workspace.length > 0) {
-              const state = readState()
-              delete state.workspaces[body.workspace]
-              const saved = writeState(state)
-              return json({ ...stateFor(), ok: saved, message: saved ? '' : 'Could not save the REA gate preference.' })
+              const saved = resetWorkspace(canonicalWorkspace(body.workspace) ?? body.workspace)
+              return json({
+                ...stateFor(undefined, tr),
+                ok: saved,
+                message: saved ? '' : tr('无法保存 REA 门控偏好。', 'Could not save the REA gate preference.'),
+              })
             }
             if (body?.action === 'check-update') {
               const result = await runCommand('npm', ['view', 'rea-agents', 'dist-tags.latest', '--json'], 15_000)
               const latest = parseJsonOutput(result)
               return typeof latest === 'string'
                 ? json({ latest })
-                : json({ ok: false, message: 'Could not read the latest stable REA version from npm.' }, 502)
+                : json({ ok: false, message: tr('无法从 npm 读取 REA 最新稳定版本。', 'Could not read the latest stable REA version from npm.') }, 502)
             }
             if (typeof body?.open !== 'boolean' || body.action !== undefined) {
               return json({ ok: false, message: 'Expected an open/closed choice.' }, 400)
@@ -839,10 +734,12 @@ export function apply(ctx) {
               return json({ ok: false, message: 'A temporary change requires an active session.' }, 400)
             }
             if (body.remember === false) {
-              applyChoice(entry.agent, body.open)
-              return json({ ...stateFor(body.session), remembered: false, ok: true })
+              applyChoice(entry.agent, body.open, { temporary: true })
+              return json({ ...stateFor(body.session, tr), remembered: false, ok: true })
             }
-            const workspace = body.workspace ?? entry?.workspace ?? null
+            const workspace = body.workspace !== undefined
+              ? (canonicalWorkspace(body.workspace) ?? body.workspace)
+              : entry?.workspace ? ruleTarget(entry.workspace) : null
             // A session-scoped control with no workspace cannot be remembered.
             // Apply it to that session instead of silently changing the global
             // default; an explicit `remember: true` is rejected.
@@ -853,15 +750,15 @@ export function apply(ctx) {
                   message: 'This session has no workspace directory; pass remember:false for a temporary change.',
                 }, 400)
               }
-              applyChoice(entry.agent, body.open)
-              return json({ ...stateFor(body.session), remembered: false, ok: true })
+              applyChoice(entry.agent, body.open, { temporary: true })
+              return json({ ...stateFor(body.session, tr), remembered: false, ok: true })
             }
             const saved = setOpen(workspace, body.open, entry?.agent)
             return json({
-              ...stateFor(body.session),
+              ...stateFor(body.session, tr),
               remembered: saved && workspace !== null,
               ok: saved,
-              message: saved ? '' : 'Could not save the REA gate preference.',
+              message: saved ? '' : tr('无法保存 REA 门控偏好。', 'Could not save the REA gate preference.'),
             })
           },
         }),
@@ -870,33 +767,49 @@ export function apply(ctx) {
   })
 
   ctx.effect(() => {
+    const timer = setInterval(() => {
+      try {
+        sweepGates()
+      } catch (error) {
+        log?.warn?.(`REA gate sweep failed: ${error?.message ?? error}`)
+      }
+    }, SWEEP_MS)
+    timer.unref?.()
     return () => {
-      for (const dispose of gates.values()) {
-        try {
-          dispose()
-        } catch {}
+      clearInterval(timer)
+      for (const masks of gates.values()) {
+        for (const dispose of masks) {
+          try {
+            dispose()
+          } catch {}
+        }
       }
       gates.clear()
+      closedAgents.clear()
+      pendingGates.clear()
     }
   })
 
+  // The model may only read or flip the gate. Installing, updating and removing
+  // REA run global package-manager commands, so they stay behind the owner's
+  // panel: an agent that is analysing an untrusted sample must not be able to
+  // reach them, whatever the sample tells it to do. For the same reason a
+  // model-initiated change is session-only unless `remember` is explicitly true.
   const definition = {
     name: 'rea_gate',
     description:
       'Read or change whether this session can use the REA reverse-engineering tools. '
-      + 'The choice is remembered per workspace directory, so it also applies to later sessions there.',
+      + 'A change applies to this session only unless remember is true, which also saves it for the workspace directory.',
     parameters: {
       action: {
         type: 'string',
         required: true,
-        enum: ['status', 'on', 'off', 'install', 'update', 'uninstall'],
-        description:
-          'status reports the current state; on exposes REA tools to this session; off hides them; '
-          + 'install sets up REA for DSH; update updates the REA installation; uninstall removes REA-owned agent registrations and skill files.',
+        enum: ['status', 'on', 'off'],
+        description: 'status reports the current state; on exposes REA tools to this session; off hides them.',
       },
       remember: {
         type: 'boolean',
-        description: 'For on or off, set false to change only this session. The default is to save the workspace choice.',
+        description: 'For on or off, set true to also save the choice for this workspace. The default changes only this session.',
       },
     },
     output: {
@@ -906,44 +819,45 @@ export function apply(ctx) {
     async execute(args, exec) {
       const agent = exec?.agent
       const workspace = workspaceOf(agent)
-      const state = readState()
+      const action = args?.action
 
-      if (Object.hasOwn(COMMANDS, args.action)) {
-        const result = await maintain(args.action)
-        const lines = [
-          args.action === 'install'
-            ? (result.ok ? 'REA is registered with DSH.' : 'REA registration failed.')
-            : args.action === 'update'
-              ? (result.ok ? 'REA was updated.' : 'REA update failed.')
-              : (result.ok ? 'REA-owned integrations and skill files were removed.' : 'REA removal failed.'),
-        ]
-        if (result.message) lines.push(result.message)
-        if (!result.ok) lines.push('Run `rea doctor` in a terminal for details.')
-        lines.push('Restart DSH if the tool list does not change in the next session.')
-        return lines.join('\n')
+      if (action !== 'status' && action !== 'on' && action !== 'off') {
+        return 'REA gate: only status, on and off are available to the agent. '
+          + 'Install, update and uninstall are managed from the REA panel in DSH.'
       }
 
-      if (!workspace && !(agent && args.remember === false)) {
-        return 'REA gate: this session has no workspace directory, so the choice cannot be remembered. '
-          + `The global default is ${state.default ? 'open' : 'closed'}.`
-      }
-
-      if (args.action === 'on' || args.action === 'off') {
-        const open = args.action === 'on'
-        if (args.remember === false && agent) applyChoice(agent, open)
-        else if (!setOpen(workspace, open, agent)) {
-          return `REA is now ${open ? 'available' : 'hidden'} in this session, but the choice could not be saved for ${workspace}.`
+      if (action === 'on' || action === 'off') {
+        const open = action === 'on'
+        if (args.remember === true) {
+          if (!workspace) {
+            return 'REA gate: this session has no workspace directory, so the choice cannot be remembered. '
+              + 'Call again without remember to change this session only.'
+          }
+          if (!setOpen(ruleTarget(workspace), open, agent)) {
+            return `REA is now ${open ? 'available' : 'hidden'} in this session, but the choice could not be saved for ${workspace}.`
+          }
+        } else if (agent) {
+          applyChoice(agent, open, { temporary: true })
+        } else {
+          return 'REA gate: no active session to change.'
         }
       }
 
-      const open = (agent && agentChoices.get(agent)) ?? isOpen(readState(), workspace)
+      const state = readState()
+      const open = (agent && getChoice(agent)?.open) ?? isOpen(state, workspace)
       const count = agent ? reaNames(ctx, agent).length : 0
-      return [
+      const rule = ruleFor(state, workspace)
+      const saved = rule
+        ? `saved as ${rule.open ? 'open' : 'closed'}${rule.path === workspace ? '' : ` via ${rule.path}`}`
+        : `no saved rule, global default ${state.default ? 'open' : 'closed'}`
+      const lines = [
         `REA is ${open ? 'available' : 'hidden'} in this session.`,
-        workspace ? `Workspace: ${workspace}` : 'Workspace: none',
+        workspace ? `Workspace: ${workspace} (${saved})` : 'Workspace: none',
         `REA tools visible in this session: ${count}.`,
         open ? 'Turn it off with action "off".' : 'Turn it on with action "on".',
-      ].join('\n')
+      ]
+      if (!open && count > 0) lines.push('Warning: the gate is closed but some REA tools are still visible.')
+      return lines.join('\n')
     },
   }
 

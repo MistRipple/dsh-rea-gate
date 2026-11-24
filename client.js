@@ -5,7 +5,234 @@ window.__ModuleLoader__.load({
     const { Button, IconRefreshOutlineRegular, Pill, StateDot, Switch, writeClipboard } = require('@deepseek-ai/dsh-client-ui-primitives')
     const h = React.createElement
 
+    // The panel follows the browser language: Chinese for zh-*, English otherwise.
+    // Source strings are Chinese; `t` looks up the English text and falls back
+    // to the source string. `__REA_GATE_LOCALE__` overrides the detection.
+    const LOCALE = (() => {
+      const forced = globalThis.__REA_GATE_LOCALE__
+      const language = typeof forced === 'string' ? forced : globalThis.navigator?.language ?? ''
+      return /^zh/i.test(language) ? 'zh' : 'en'
+    })()
+
+    // English text for the Chinese source strings. A '{}' marks a value filled in at that position.
+    const EN = {
+      '正在安装并注册 REA…': 'Installing and registering REA…',
+      'REA 安装与注册已完成': 'REA installed and registered',
+      '正在通过 npm 重新安装并注册最新版 REA…': 'Reinstalling the latest REA from npm and registering it…',
+      'REA 已重新安装并注册到 DSH': 'REA reinstalled and registered with DSH',
+      '正在更新 REA…': 'Updating REA…',
+      'REA 更新命令已完成': 'REA update finished',
+      '正在卸载 REA 集成…': 'Removing the REA integration…',
+      'REA 集成已卸载': 'REA integration removed',
+      '正在卸载 REA 集成与命令行包…': 'Removing the REA integration and command-line package…',
+      'REA 集成与命令行包已彻底卸载': 'REA integration and command-line package fully removed',
+      '正在重新注册 REA…': 'Registering REA again…',
+      'REA 注册修复步骤已完成': 'REA registration repair finished',
+      '正在保存…': 'Saving…',
+      '无法保存会话默认设置，请重试。': 'Could not save the session default. Please try again.',
+      '已保存': 'Saved',
+      '正在更新工作区规则…': 'Updating the workspace rule…',
+      '无法保存工作区规则，请重试。': 'Could not save the workspace rule. Please try again.',
+      '正在通过 Homebrew 安装（可能需要几分钟）…': 'Installing with Homebrew (this can take a few minutes)…',
+      '安装完成并已自动检测本机环境': 'Installed. The local environment was detected automatically.',
+      '安装失败，请查看输出或点击官方链接手动下载。': 'Installation failed. Check the output or download it manually from the official link.',
+      '正在保存路径并重新检测…': 'Saving the path and re-checking…',
+      '路径配置已保存并重新检测': 'Path saved and re-checked',
+      '无法保存路径配置，请重试。': 'Could not save the path. Please try again.',
+      '例如 /opt/homebrew/opt/ghidra/libexec': 'e.g. /opt/homebrew/opt/ghidra/libexec',
+      '例如 /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home': 'e.g. /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home',
+      '例如 /usr/local/bin/hopper': 'e.g. /usr/local/bin/hopper',
+      '例如 ~/.config/ida/mcp.json': 'e.g. ~/.config/ida/mcp.json',
+      '例如 ~/tools/jadx-headless-mcp-0.7.1-all.jar': 'e.g. ~/tools/jadx-headless-mcp-0.7.1-all.jar',
+      '例如 /opt/homebrew/bin/apktool': 'e.g. /opt/homebrew/bin/apktool',
+      '例如 /opt/homebrew/bin/adb': 'e.g. /opt/homebrew/bin/adb',
+      '例如 /usr/local/bin/kuna': 'e.g. /usr/local/bin/kuna',
+      '原生二进制分析': 'Native binary analysis',
+      'Android 逆向': 'Android reverse engineering',
+      '共享运行时依赖': 'Shared runtime dependencies',
+      '需 Java': 'Needs Java',
+      'NSA 开源反编译与原生二进制分析框架。': 'Open-source decompiler and native binary analysis framework from the NSA.',
+      '下载并解压 Ghidra 12.2+ 发行包，将解压后的根目录路径配置到环境变量 GHIDRA_INSTALL_DIR，同时确保具备兼容版本的 JDK。': 'Download and unpack Ghidra 12.2+, set GHIDRA_INSTALL_DIR to the unpacked root directory, and make sure a compatible JDK is available.',
+      '下载 Ghidra': 'Download Ghidra',
+      '供 Ghidra 和 jadx 使用的运行时环境。': 'Runtime used by Ghidra and jadx.',
+      '若系统 PATH 中尚未配置兼容的 JDK，请安装 Temurin JDK 并设置 JAVA_HOME；如 PATH 已可直接调用 java，REA 也会尝试自动识别。': 'If no compatible JDK is on PATH, install Temurin JDK and set JAVA_HOME. If java already runs from PATH, REA will try to detect it automatically.',
+      '下载 JDK': 'Download JDK',
+      'macOS / Linux 交互式反汇编与反编译工具。': 'Interactive disassembler and decompiler for macOS and Linux.',
+      '安装 Hopper 后运行 rea setup 自动接入，或将启动器路径配置到环境变量 HOPPER_LAUNCHER_PATH。': 'After installing Hopper, run rea setup to connect it automatically, or set HOPPER_LAUNCHER_PATH to the launcher path.',
+      '下载 Hopper': 'Download Hopper',
+      '原生二进制逆向平台，通过独立 IDA MCP 桥接。': 'Native binary reverse-engineering platform, bridged through a separate IDA MCP.',
+      '安装 IDA 并按照指南配置上游 IDA MCP 注册 JSON，然后将该 JSON 文件路径设置到环境变量 REA_IDA_MCP_CONFIG。': 'Install IDA, configure the upstream IDA MCP registration JSON by following the guide, then set REA_IDA_MCP_CONFIG to that JSON file path.',
+      '获取 IDA Free': 'Get IDA Free',
+      'IDA MCP 配置指南': 'IDA MCP setup guide',
+      'MCP 配置指南': 'MCP setup guide',
+      'Android DEX / APK 反编译引擎。': 'Android DEX / APK decompilation engine.',
+      '从上游仓库下载 jadx-headless-mcp 发行版 JAR 并核对完整性，再将该 JAR 的绝对路径配置到环境变量 REA_JADX_MCP_JAR。': 'Download the jadx-headless-mcp release JAR from the upstream repository, verify its integrity, then set REA_JADX_MCP_JAR to its absolute path.',
+      '下载 jadx MCP': 'Download jadx MCP',
+      '解码 APK 资源文件与 AndroidManifest 清单。': 'Decodes APK resources and the AndroidManifest.',
+      '安装 apktool 并加入系统 PATH，或通过环境变量 REA_APKTOOL_COMMAND 指定可执行文件绝对路径。': 'Install apktool and add it to PATH, or set REA_APKTOOL_COMMAND to the absolute path of the executable.',
+      '安装 apktool': 'Install apktool',
+      '连接与调试 Android 真机和模拟器。': 'Connects to and debugs Android devices and emulators.',
+      '安装 Android platform-tools 并加入 PATH，或通过环境变量 REA_ADB_PATH 指定 adb 可执行文件路径。': 'Install Android platform-tools and add it to PATH, or set REA_ADB_PATH to the adb executable.',
+      '下载 platform-tools': 'Download platform-tools',
+      '轻量级原生二进制反编译引擎。': 'Lightweight native binary decompilation engine.',
+      '获取对应平台的 Kuna 可执行文件后，将其绝对路径配置到环境变量 REA_KUNA_COMMAND。': 'Get the Kuna executable for your platform, then set REA_KUNA_COMMAND to its absolute path.',
+      '下载 Kuna': 'Download Kuna',
+      '无法读取本机状态，请重试。': 'Could not read the local state. Please try again.',
+      '无法查询 npm 稳定版，请重试。': 'Could not look up the stable npm version. Please try again.',
+      '操作失败，请重新检测本机状态。': 'The action failed. Re-check the local state.',
+      '复制': 'Copy',
+      '已复制': 'Copied',
+      '复制失败': 'Copy failed',
+      '安装 REA': 'Install REA',
+      '通过 npm 安装命令行工具并注册到 DSH。': 'Installs the command-line tool through npm and registers it with DSH.',
+      '重新检测本机': 'Re-check this machine',
+      '无法读取 REA 命令行状态。': 'Could not read the REA command-line status.',
+      '注册到 DSH': 'Register with DSH',
+      '已找到本机 REA，可直接注册。': 'REA was found on this machine and can be registered directly.',
+      '修复注册': 'Repair registration',
+      'DSH 注册需要重新配置。': 'The DSH registration needs to be configured again.',
+      '更新 REA': 'Update REA',
+      '发现 npm 稳定版 {}': 'Stable npm version {} found',
+      '重新检查': 'Check again',
+      '已是最新版': 'Up to date',
+      '当前版本高于 npm 稳定版 {}': 'The installed version is newer than the stable npm version {}',
+      '重试检查更新': 'Retry update check',
+      '检查更新': 'Check for updates',
+      'npm 稳定版 {}，请重新检测本机版本。': 'Stable npm version {}. Re-check the local version.',
+      '可随时检查 npm 稳定版更新。': 'You can check for stable npm updates at any time.',
+      '卸载 REA 集成': 'Remove the REA integration',
+      '此操作会清理本机所有客户端中的 REA 注册信息，确认继续吗？': 'This clears the REA registrations of every client on this machine. Continue?',
+      '将移除': 'Will remove',
+      'REA 为 DSH 及其他客户端创建的注册和技能文件，以及本机全局 rea-agents 命令行包': 'The registrations and skill files REA created for DSH and other clients, plus the global rea-agents command-line package',
+      'REA 为 DSH 及其他客户端创建的注册和技能文件': 'The registrations and skill files REA created for DSH and other clients',
+      '将保留': 'Will keep',
+      '工作区门控偏好与本地分析引擎': 'Workspace gate preferences and local analysis engines',
+      'REA 命令行软件包、工作区门控偏好与本地分析引擎': 'The REA command-line package, workspace gate preferences and local analysis engines',
+      '同时卸载本机 rea-agents 命令行包（npm uninstall -g rea-agents）': 'Also remove the rea-agents command-line package (npm uninstall -g rea-agents)',
+      '取消': 'Cancel',
+      '彻底卸载': 'Remove completely',
+      '确认卸载': 'Confirm removal',
+      '关闭提示': 'Dismiss',
+      '命令输出': 'Command output',
+      'DSH 已注册': 'Registered with DSH',
+      'DSH 未注册': 'Not registered with DSH',
+      'DSH 注册异常': 'DSH registration needs attention',
+      'DSH 注册待确认': 'DSH registration unconfirmed',
+      '本机注册已移除，但宿主仍显示已加载工具，可重新检测确认。': 'The local registration was removed, but the host still shows loaded tools. Re-check to confirm.',
+      '工具尚未加载到当前宿主，重新检测后如仍未生效可重启 DSH。': 'The tools are not loaded in this host yet. If re-checking does not help, restart DSH.',
+      '运行状态与更新': 'Status and updates',
+      '未安装': 'Not installed',
+      '版本待确认': 'Version unconfirmed',
+      '宿主已加载 {} 个工具': 'Host has loaded {} tools',
+      '宿主未加载': 'Not loaded in host',
+      '正在查询 npm 稳定版…': 'Looking up the stable npm version…',
+      '检查中…': 'Checking…',
+      '重装最新版': 'Reinstall latest',
+      'REA 安装指南': 'REA install guide',
+      'DSH 集成维护': 'DSH integration maintenance',
+      '重新注册': 'Re-register',
+      '卸载集成': 'Remove integration',
+      '会话与工作区设置': 'Sessions and workspaces',
+      '新会话默认启用 REA': 'Enable REA in new sessions by default',
+      '未单独配置的工作区将继承此设置，仅对之后新建的会话生效；正在运行的会话可通过顶部 REA 胶囊切换。': 'Workspaces without their own rule inherit this setting. It applies only to sessions created afterwards; change a running one with the REA chip in its header.',
+      '工作区独立规则': 'Workspace rules',
+      '{} 个已记忆': '{} remembered',
+      '暂无工作区独立规则。在任意会话顶部切换 REA 开关时，会自动记住该工作区的偏好。': 'No workspace rules yet. Switching the REA toggle in a session header remembers the choice for that workspace.',
+      '该目录已不存在，可以重置此规则': 'This directory no longer exists. You can reset this rule.',
+      '目录不存在': 'Directory missing',
+      '已启用': 'Enabled',
+      '已关闭': 'Disabled',
+      '工作区 {} 启用 REA': 'Enable REA in workspace {}',
+      '移除独立规则，恢复继承全局默认': 'Remove the rule and inherit the global default again',
+      '重置工作区 {}': 'Reset workspace {}',
+      '重置': 'Reset',
+      '可用': 'Available',
+      '需检查': 'Needs attention',
+      '已配置，待验证': 'Configured, not verified',
+      '未配置': 'Not configured',
+      '待验证': 'Not verified',
+      '已由宿主环境变量设置（可填写绝对路径覆盖）': 'Set by a host environment variable (enter an absolute path to override)',
+      '填写 {} 的绝对路径': 'Enter the absolute path for {}',
+      '已设置': 'Set',
+      '未设置': 'Not set',
+      '复制变量': 'Copy variable',
+      '复制环境变量 {}': 'Copy environment variable {}',
+      '{} 路径': '{} path',
+      '保存 {}': 'Save {}',
+      '保存并检测': 'Save and check',
+      '清除 {}': 'Clear {}',
+      '清除': 'Clear',
+      '可选分析引擎。': 'Optional analysis engine.',
+      '配置说明': 'Setup',
+      '环境变量与路径配置': 'Environment variables and paths',
+      '{} 环境变量': '{} environment variables',
+      'Homebrew 安装': 'Homebrew install',
+      '正在执行 {}（可能需要几分钟）…': 'Running {} (this can take a few minutes)…',
+      '本机检测通过，在启用 REA 的会话中可直接调用此引擎。': 'The local check passed. This engine can be used directly in sessions where REA is enabled.',
+      '异常诊断（rea doctor）': 'Problem details (rea doctor)',
+      '检测详情（rea doctor）': 'Check details (rea doctor)',
+      '复制 SHA-256': 'Copy SHA-256',
+      '复制 SHA-256 校验值': 'Copy the SHA-256 checksum',
+      '安装中…': 'Installing…',
+      '一键安装 {}': 'Install {} with one click',
+      '其他引擎': 'Other engines',
+      '可用 {} / {}': '{} / {} available',
+      '需检查 {}': '{} need attention',
+      '上次检测 {}': 'Last checked {}',
+      '点击条目展开配置与详情': 'Select an entry to expand its settings and details',
+      '分析引擎与依赖': 'Analysis engines and dependencies',
+      '正在重新检测本机状态…': 'Re-checking this machine…',
+      '体检仍在后台运行，完成后会自动更新…': 'The check is still running in the background and will update when it finishes…',
+      '检测中…': 'Checking…',
+      '重新检测': 'Re-check',
+      '{} 项': '{} items',
+      '用 REA 查看 <应用路径> 的 Electron 入口模块和 preload 脚本。': 'Use REA to inspect the Electron entry module and preload script of <app path>.',
+      '用 REA 列出 <文件路径> 中 .NET 程序集的公开类型和入口点。': 'Use REA to list the public types and entry points of the .NET assembly <file path>.',
+      'REA 会话示例': 'REA session examples',
+      '开启 REA 后可直接发给助手的逆向分析提示词模板': 'Prompt templates you can send to the assistant once REA is enabled',
+      'REA 文档': 'REA docs',
+      '复制示例：{}': 'Copy example: {}',
+      '助手调用 rea_gate 的 on / off 默认只对本次会话生效；需要同时保存到工作区时，将 remember 设为 true。': 'rea_gate on / off called by the assistant applies to this session only by default. Set remember to true to also save it for the workspace.',
+      '高级诊断': 'Advanced diagnostics',
+      '查看 DSH 配置文件路径与宿主客户端模块图状态': 'View the DSH config file path and the host client module graph status',
+      'DSH 注册配置路径': 'DSH registration config path',
+      '复制路径': 'Copy path',
+      '复制 DSH 配置路径': 'Copy the DSH config path',
+      '插件诊断': 'Plugin diagnostics',
+      '检查宿主是否已发布面板模块。': 'Check whether the host has published the panel module.',
+      '正在检查模块图…': 'Checking the module graph…',
+      '无法读取模块图，请重试。': 'Could not read the module graph. Please try again.',
+      '模块已加入图（{}）': 'Module is in the graph ({})',
+      '模块尚未加入图。': 'Module is not in the graph yet.',
+      '检查模块图': 'Check module graph',
+      '正在读取本机状态…': 'Reading the local state…',
+      '重试': 'Retry',
+      'REA 管理': 'REA management',
+      '管理本机 REA 集成、工作区门控偏好与可选分析引擎': 'Manage the local REA integration, workspace gate preferences and optional analysis engines',
+      '无法切换 REA': 'Could not switch REA',
+      '门控已关闭，但本会话仍可见 {} 个 REA 工具': 'The gate is closed, but this session can still see {} REA tools',
+      '本会话可见 {} 个 REA 工具': 'This session can see {} REA tools',
+      'REA 开': 'REA on',
+      'REA 关（未生效）': 'REA off (not effective)',
+      'REA 关': 'REA off',
+      'REA 未安装': 'REA not installed',
+    }
+
+    const t = (chinese) => (LOCALE === 'zh' ? chinese : EN[chinese] ?? chinese)
+    // Tagged form for strings with values: the key is the text with '{}' in place of each value.
+    function tt(strings, ...values) {
+      const key = strings.join('{}')
+      const text = LOCALE === 'zh' ? key : EN[key] ?? key
+      let index = 0
+      return text.replace(/\{\}/g, () => String(values[index++] ?? ''))
+    }
+
     const PANEL_ID = 'rea-gate'
+    // `rea doctor` may run for up to 30 s on the host; keep asking until it settles.
+    const FOLLOW_UP_MS = 2_000
+    const MAX_FOLLOW_UPS = 20
+    // The chip re-reads this often while its page is visible.
+    const CHIP_POLL_MS = 5_000
 
     const CSS = `
       .rea-gate {
@@ -496,16 +723,16 @@ window.__ModuleLoader__.load({
     `
 
     const operations = {
-      install: { pending: '正在安装并注册 REA…', success: 'REA 安装与注册已完成' },
-      reinstall: { pending: '正在通过 npm 重新安装并注册最新版 REA…', success: 'REA 已重新安装并注册到 DSH' },
-      update: { pending: '正在更新 REA…', success: 'REA 更新命令已完成' },
-      uninstall: { pending: '正在卸载 REA 集成…', success: 'REA 集成已卸载' },
-      'uninstall-full': { pending: '正在卸载 REA 集成与命令行包…', success: 'REA 集成与命令行包已彻底卸载' },
-      repair: { pending: '正在重新注册 REA…', success: 'REA 注册修复步骤已完成' },
-      preference: { pending: '正在保存…', failure: '无法保存会话默认设置，请重试。', success: '已保存' },
-      workspace: { pending: '正在更新工作区规则…', failure: '无法保存工作区规则，请重试。' },
-      'install-engine': { pending: '正在通过 Homebrew 安装（可能需要几分钟）…', success: '安装完成并已自动检测本机环境', failure: '安装失败，请查看输出或点击官方链接手动下载。' },
-      'set-env': { pending: '正在保存路径并重新检测…', success: '路径配置已保存并重新检测', failure: '无法保存路径配置，请重试。' },
+      install: { pending: t('正在安装并注册 REA…'), success: t('REA 安装与注册已完成') },
+      reinstall: { pending: t('正在通过 npm 重新安装并注册最新版 REA…'), success: t('REA 已重新安装并注册到 DSH') },
+      update: { pending: t('正在更新 REA…'), success: t('REA 更新命令已完成') },
+      uninstall: { pending: t('正在卸载 REA 集成…'), success: t('REA 集成已卸载') },
+      'uninstall-full': { pending: t('正在卸载 REA 集成与命令行包…'), success: t('REA 集成与命令行包已彻底卸载') },
+      repair: { pending: t('正在重新注册 REA…'), success: t('REA 注册修复步骤已完成') },
+      preference: { pending: t('正在保存…'), failure: t('无法保存会话默认设置，请重试。'), success: t('已保存') },
+      workspace: { pending: t('正在更新工作区规则…'), failure: t('无法保存工作区规则，请重试。') },
+      'install-engine': { pending: t('正在通过 Homebrew 安装（可能需要几分钟）…'), success: t('安装完成并已自动检测本机环境'), failure: t('安装失败，请查看输出或点击官方链接手动下载。') },
+      'set-env': { pending: t('正在保存路径并重新检测…'), success: t('路径配置已保存并重新检测'), failure: t('无法保存路径配置，请重试。') },
     }
 
     function operationMeta(operation) {
@@ -516,88 +743,88 @@ window.__ModuleLoader__.load({
     }
 
     const ENV_PLACEHOLDERS = {
-      GHIDRA_INSTALL_DIR: '例如 /opt/homebrew/opt/ghidra/libexec',
-      JAVA_HOME: '例如 /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home',
-      HOPPER_LAUNCHER_PATH: '例如 /usr/local/bin/hopper',
-      REA_IDA_MCP_CONFIG: '例如 ~/.config/ida/mcp.json',
-      REA_JADX_MCP_JAR: '例如 ~/tools/jadx-headless-mcp-0.7.1-all.jar',
-      REA_APKTOOL_COMMAND: '例如 /opt/homebrew/bin/apktool',
-      REA_ADB_PATH: '例如 /opt/homebrew/bin/adb',
-      REA_KUNA_COMMAND: '例如 /usr/local/bin/kuna',
+      GHIDRA_INSTALL_DIR: t('例如 /opt/homebrew/opt/ghidra/libexec'),
+      JAVA_HOME: t('例如 /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home'),
+      HOPPER_LAUNCHER_PATH: t('例如 /usr/local/bin/hopper'),
+      REA_IDA_MCP_CONFIG: t('例如 ~/.config/ida/mcp.json'),
+      REA_JADX_MCP_JAR: t('例如 ~/tools/jadx-headless-mcp-0.7.1-all.jar'),
+      REA_APKTOOL_COMMAND: t('例如 /opt/homebrew/bin/apktool'),
+      REA_ADB_PATH: t('例如 /opt/homebrew/bin/adb'),
+      REA_KUNA_COMMAND: t('例如 /usr/local/bin/kuna'),
     }
 
     const ENGINE_GROUPS = [
-      { id: 'native', title: '原生二进制分析', engines: ['ghidra', 'hopper', 'ida', 'kuna'] },
-      { id: 'android', title: 'Android 逆向', engines: ['jadx', 'apktool', 'adb'] },
-      { id: 'runtime', title: '共享运行时依赖', engines: ['java'] },
+      { id: 'native', title: t('原生二进制分析'), engines: ['ghidra', 'hopper', 'ida', 'kuna'] },
+      { id: 'android', title: t('Android 逆向'), engines: ['jadx', 'apktool', 'adb'] },
+      { id: 'runtime', title: t('共享运行时依赖'), engines: ['java'] },
     ]
 
     const providers = {
       ghidra: {
         name: 'Ghidra',
-        dep: '需 Java',
-        description: 'NSA 开源反编译与原生二进制分析框架。',
-        setup: '下载并解压 Ghidra 12.2+ 发行包，将解压后的根目录路径配置到环境变量 GHIDRA_INSTALL_DIR，同时确保具备兼容版本的 JDK。',
+        dep: t('需 Java'),
+        description: t('NSA 开源反编译与原生二进制分析框架。'),
+        setup: t('下载并解压 Ghidra 12.2+ 发行包，将解压后的根目录路径配置到环境变量 GHIDRA_INSTALL_DIR，同时确保具备兼容版本的 JDK。'),
         href: 'https://github.com/NationalSecurityAgency/ghidra/releases',
-        label: '下载 Ghidra',
+        label: t('下载 Ghidra'),
       },
       java: {
         name: 'Java (JDK)',
-        description: '供 Ghidra 和 jadx 使用的运行时环境。',
-        setup: '若系统 PATH 中尚未配置兼容的 JDK，请安装 Temurin JDK 并设置 JAVA_HOME；如 PATH 已可直接调用 java，REA 也会尝试自动识别。',
+        description: t('供 Ghidra 和 jadx 使用的运行时环境。'),
+        setup: t('若系统 PATH 中尚未配置兼容的 JDK，请安装 Temurin JDK 并设置 JAVA_HOME；如 PATH 已可直接调用 java，REA 也会尝试自动识别。'),
         href: 'https://adoptium.net/temurin/releases/',
-        label: '下载 JDK',
+        label: t('下载 JDK'),
       },
       hopper: {
         name: 'Hopper',
-        description: 'macOS / Linux 交互式反汇编与反编译工具。',
-        setup: '安装 Hopper 后运行 rea setup 自动接入，或将启动器路径配置到环境变量 HOPPER_LAUNCHER_PATH。',
+        description: t('macOS / Linux 交互式反汇编与反编译工具。'),
+        setup: t('安装 Hopper 后运行 rea setup 自动接入，或将启动器路径配置到环境变量 HOPPER_LAUNCHER_PATH。'),
         href: 'https://www.hopperapp.com/download.html',
-        label: '下载 Hopper',
+        label: t('下载 Hopper'),
       },
       ida: {
         name: 'IDA',
-        description: '原生二进制逆向平台，通过独立 IDA MCP 桥接。',
-        setup: '安装 IDA 并按照指南配置上游 IDA MCP 注册 JSON，然后将该 JSON 文件路径设置到环境变量 REA_IDA_MCP_CONFIG。',
+        description: t('原生二进制逆向平台，通过独立 IDA MCP 桥接。'),
+        setup: t('安装 IDA 并按照指南配置上游 IDA MCP 注册 JSON，然后将该 JSON 文件路径设置到环境变量 REA_IDA_MCP_CONFIG。'),
         href: 'https://hex-rays.com/ida-free',
-        label: '获取 IDA Free',
+        label: t('获取 IDA Free'),
         extraLinks: [
           {
             key: 'ida-guide',
             href: 'https://github.com/morluto/rea/blob/main/docs/providers/ida-provider.md',
-            label: 'IDA MCP 配置指南',
-            text: 'MCP 配置指南',
+            label: t('IDA MCP 配置指南'),
+            text: t('MCP 配置指南'),
           },
         ],
       },
       jadx: {
         name: 'jadx',
-        dep: '需 Java',
-        description: 'Android DEX / APK 反编译引擎。',
-        setup: '从上游仓库下载 jadx-headless-mcp 发行版 JAR 并核对完整性，再将该 JAR 的绝对路径配置到环境变量 REA_JADX_MCP_JAR。',
+        dep: t('需 Java'),
+        description: t('Android DEX / APK 反编译引擎。'),
+        setup: t('从上游仓库下载 jadx-headless-mcp 发行版 JAR 并核对完整性，再将该 JAR 的绝对路径配置到环境变量 REA_JADX_MCP_JAR。'),
         href: 'https://github.com/1013503897/jadx-headless-mcp/releases',
-        label: '下载 jadx MCP',
+        label: t('下载 jadx MCP'),
       },
       apktool: {
         name: 'apktool',
-        description: '解码 APK 资源文件与 AndroidManifest 清单。',
-        setup: '安装 apktool 并加入系统 PATH，或通过环境变量 REA_APKTOOL_COMMAND 指定可执行文件绝对路径。',
+        description: t('解码 APK 资源文件与 AndroidManifest 清单。'),
+        setup: t('安装 apktool 并加入系统 PATH，或通过环境变量 REA_APKTOOL_COMMAND 指定可执行文件绝对路径。'),
         href: 'https://apktool.org/docs/install/',
-        label: '安装 apktool',
+        label: t('安装 apktool'),
       },
       adb: {
         name: 'adb',
-        description: '连接与调试 Android 真机和模拟器。',
-        setup: '安装 Android platform-tools 并加入 PATH，或通过环境变量 REA_ADB_PATH 指定 adb 可执行文件路径。',
+        description: t('连接与调试 Android 真机和模拟器。'),
+        setup: t('安装 Android platform-tools 并加入 PATH，或通过环境变量 REA_ADB_PATH 指定 adb 可执行文件路径。'),
         href: 'https://developer.android.com/tools/releases/platform-tools',
-        label: '下载 platform-tools',
+        label: t('下载 platform-tools'),
       },
       kuna: {
         name: 'Kuna',
-        description: '轻量级原生二进制反编译引擎。',
-        setup: '获取对应平台的 Kuna 可执行文件后，将其绝对路径配置到环境变量 REA_KUNA_COMMAND。',
+        description: t('轻量级原生二进制反编译引擎。'),
+        setup: t('获取对应平台的 Kuna 可执行文件后，将其绝对路径配置到环境变量 REA_KUNA_COMMAND。'),
         href: 'https://github.com/Noelo-Lab/kuna/releases',
-        label: '下载 Kuna',
+        label: t('下载 Kuna'),
       },
     }
 
@@ -624,38 +851,57 @@ window.__ModuleLoader__.load({
       const [updateLookup, setUpdateLookup] = React.useState({ latest: null, checking: false, error: null })
       const [pending, setPending] = React.useState('load')
       const [feedback, setFeedback] = React.useState(null)
-      const request = React.useRef(false)
+      // Reading and acting are tracked separately: a background re-read must
+      // never swallow a click, and a click must not be undone by a read that
+      // started before it finished.
+      const reading = React.useRef(false)
+      const acting = React.useRef(false)
+      const epoch = React.useRef(0)
       const updateRequest = React.useRef(false)
       const followUps = React.useRef(0)
       const followTimer = React.useRef(null)
+      const queuedLoad = React.useRef(null)
 
       React.useEffect(() => () => {
         if (followTimer.current) clearTimeout(followTimer.current)
       }, [])
 
       const load = React.useCallback(async (refresh = false, options = {}) => {
-        if (request.current) return
-        request.current = true
+        if (reading.current) {
+          // A requested re-check must not vanish because a background read is running.
+          if (!options.silent) queuedLoad.current = Boolean(queuedLoad.current) || refresh
+          return
+        }
+        reading.current = true
+        const startedAt = epoch.current
         if (!options.silent) {
+          followUps.current = 0
           setPending('load')
           setFeedback(null)
         }
         const next = await call(refresh ? 'state?refresh=1' : 'state')
         if (next && next.ok !== false) {
-          setState(next)
-          // A slow engine check answered with the cached view. Re-read once the
-          // background `rea doctor` settles instead of blocking the first paint.
-          if (next.checks === 'pending' && followUps.current < 3) {
+          // An action finished while this read was in flight; its result is newer.
+          if (startedAt === epoch.current) setState(next)
+          // A slow engine check answered with the cached view. Keep re-reading
+          // until the background `rea doctor` settles (it may take up to 30 s)
+          // instead of blocking the first paint or giving up after a few tries.
+          if (next.checks === 'pending' && followUps.current < MAX_FOLLOW_UPS) {
             followUps.current += 1
             if (followTimer.current) clearTimeout(followTimer.current)
-            followTimer.current = setTimeout(() => { void load(false, { silent: true }) }, 2_000)
+            followTimer.current = setTimeout(() => { void load(false, { silent: true }) }, FOLLOW_UP_MS)
             followTimer.current?.unref?.()
           }
         } else if (!options.silent) {
-          setFeedback({ operation: 'load', error: true, title: '无法读取本机状态，请重试。' })
+          setFeedback({ operation: 'load', error: true, title: t(t('无法读取本机状态，请重试。')) })
         }
-        request.current = false
+        reading.current = false
         if (!options.silent) setPending(null)
+        if (queuedLoad.current !== null) {
+          const again = queuedLoad.current
+          queuedLoad.current = null
+          void load(again)
+        }
       }, [])
 
       React.useEffect(() => { void load() }, [load])
@@ -670,27 +916,28 @@ window.__ModuleLoader__.load({
         } else {
           setUpdateLookup({
             latest: null, checking: false,
-            error: { error: true, title: '无法查询 npm 稳定版，请重试。', output: next?.message },
+            error: { error: true, title: t('无法查询 npm 稳定版，请重试。'), output: next?.message },
           })
         }
         updateRequest.current = false
       }
 
       async function run(body, operation = body.action ?? 'preference') {
-        if (request.current) return false
-        request.current = true
+        if (acting.current) return false
+        acting.current = true
         setPending(operation)
         setFeedback(null)
         const next = await post(body)
+        epoch.current += 1
         if (typeof next?.installed === 'boolean') setState(next)
         const success = Boolean(next && next.ok !== false)
         const meta = operationMeta(operation)
         if (!success) {
-          setFeedback({ operation, error: true, title: meta?.failure ?? '操作失败，请重新检测本机状态。', output: next?.message })
+          setFeedback({ operation, error: true, title: meta?.failure ?? t(t('操作失败，请重新检测本机状态。')), output: next?.message })
         } else if (meta?.success) {
           setFeedback({ operation, title: meta.success, output: next.message })
         }
-        request.current = false
+        acting.current = false
         setPending(null)
         return success
       }
@@ -738,7 +985,7 @@ window.__ModuleLoader__.load({
       return h('span', { className: 'rea-status' }, h(StateDot, { state, size: 7 }), children)
     }
 
-    function CopyButton({ text, label = '复制', copiedLabel = '已复制', ariaLabel }) {
+    function CopyButton({ text, label = t('复制'), copiedLabel = t('已复制'), ariaLabel }) {
       const [status, setStatus] = React.useState('idle')
       const timer = React.useRef(null)
       React.useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
@@ -755,7 +1002,7 @@ window.__ModuleLoader__.load({
         timer.current = setTimeout(() => setStatus('idle'), 1800)
         timer.current?.unref?.()
       }
-      const caption = status === 'copied' ? copiedLabel : status === 'failed' ? '复制失败' : label
+      const caption = status === 'copied' ? copiedLabel : status === 'failed' ? t('复制失败') : label
       return h(Button, {
         variant: 'ghost',
         size: 'sm',
@@ -788,29 +1035,34 @@ window.__ModuleLoader__.load({
       return local[4] ? -1 : 0
     }
 
+    // The host decides what counts as healthy; the list is only a fallback for an older host.
+    function registrationHealthy(state) {
+      return state.registration?.healthy ?? ['aligned', 'healthy'].includes(state.registration?.state)
+    }
+
     function versionAction(state, latest, retry) {
-      if (state.cli === 'missing') return { action: 'install', label: '安装 REA', hint: '通过 npm 安装命令行工具并注册到 DSH。' }
+      if (state.cli === 'missing') return { action: 'install', label: t('安装 REA'), hint: t('通过 npm 安装命令行工具并注册到 DSH。') }
       if (state.cli === 'unavailable' && !state.version) {
-        return { action: 'reload', label: '重新检测本机', hint: '无法读取 REA 命令行状态。' }
+        return { action: 'reload', label: t('重新检测本机'), hint: t('无法读取 REA 命令行状态。') }
       }
       if (!state.installed) {
         return state.version
-          ? { action: 'install', operation: 'repair', label: '注册到 DSH', hint: '已找到本机 REA，可直接注册。' }
-          : { action: 'install', label: '安装 REA' }
+          ? { action: 'install', operation: 'repair', label: t('注册到 DSH'), hint: t('已找到本机 REA，可直接注册。') }
+          : { action: 'install', label: t('安装 REA') }
       }
       const registration = state.registration?.state
-      if (registration && !['aligned', 'healthy'].includes(registration)) {
-        return { action: 'install', operation: 'repair', label: '修复注册', hint: 'DSH 注册需要重新配置。' }
+      if (registration && !registrationHealthy(state)) {
+        return { action: 'install', operation: 'repair', label: t('修复注册'), hint: t('DSH 注册需要重新配置。') }
       }
 
       const comparison = compareToStable(state.version, latest)
-      if (comparison === -1) return { action: 'update', label: '更新 REA', hint: `发现 npm 稳定版 ${latest}` }
-      if (comparison === 0) return { action: 'check-update', label: '重新检查', hint: '已是最新版', secondary: true }
-      if (comparison === 1) return { action: 'check-update', label: '重新检查', hint: `当前版本高于 npm 稳定版 ${latest}`, secondary: true }
+      if (comparison === -1) return { action: 'update', label: t('更新 REA'), hint: tt`发现 npm 稳定版 ${latest}` }
+      if (comparison === 0) return { action: 'check-update', label: t('重新检查'), hint: t('已是最新版'), secondary: true }
+      if (comparison === 1) return { action: 'check-update', label: t('重新检查'), hint: tt`当前版本高于 npm 稳定版 ${latest}`, secondary: true }
       return {
         action: 'check-update',
-        label: retry ? '重试检查更新' : latest ? '重新检查' : '检查更新',
-        hint: latest ? `npm 稳定版 ${latest}，请重新检测本机版本。` : '可随时检查 npm 稳定版更新。',
+        label: retry ? t('重试检查更新') : latest ? t('重新检查') : t('检查更新'),
+        hint: latest ? tt`npm 稳定版 ${latest}，请重新检测本机版本。` : t('可随时检查 npm 稳定版更新。'),
       }
     }
 
@@ -830,22 +1082,22 @@ window.__ModuleLoader__.load({
         onCancel: (event) => { event.preventDefault(); close() },
       },
         h('div', { className: 'rea-row' },
-          h('h3', { id: titleId, className: 'rea-dialog-title' }, '卸载 REA 集成'),
+          h('h3', { id: titleId, className: 'rea-dialog-title' }, t('卸载 REA 集成')),
         ),
         h('div', { className: 'rea-dialog-body' },
-          h('p', { className: 'rea-muted' }, '此操作会清理本机所有客户端中的 REA 注册信息，确认继续吗？'),
+          h('p', { className: 'rea-muted' }, t('此操作会清理本机所有客户端中的 REA 注册信息，确认继续吗？')),
           h('ul', { className: 'rea-impact-list' },
             h('li', null,
-              h('span', { className: 'rea-impact-tag rea-impact-remove' }, '将移除'),
+              h('span', { className: 'rea-impact-tag rea-impact-remove' }, t('将移除')),
               h('span', null, removePackage
-                ? 'REA 为 DSH 及其他客户端创建的注册和技能文件，以及本机全局 rea-agents 命令行包'
-                : 'REA 为 DSH 及其他客户端创建的注册和技能文件'),
+                ? t('REA 为 DSH 及其他客户端创建的注册和技能文件，以及本机全局 rea-agents 命令行包')
+                : t('REA 为 DSH 及其他客户端创建的注册和技能文件')),
             ),
             h('li', null,
-              h('span', { className: 'rea-impact-tag rea-impact-keep' }, '将保留'),
+              h('span', { className: 'rea-impact-tag rea-impact-keep' }, t('将保留')),
               h('span', null, removePackage
-                ? '工作区门控偏好与本地分析引擎'
-                : 'REA 命令行软件包、工作区门控偏好与本地分析引擎'),
+                ? t('工作区门控偏好与本地分析引擎')
+                : t('REA 命令行软件包、工作区门控偏好与本地分析引擎')),
             ),
           ),
           h('label', { className: 'rea-checkbox-row' },
@@ -854,15 +1106,15 @@ window.__ModuleLoader__.load({
               checked: removePackage,
               onChange: (event) => setRemovePackage(Boolean(event?.target?.checked)),
             }),
-            h('span', null, '同时卸载本机 rea-agents 命令行包（npm uninstall -g rea-agents）'),
+            h('span', null, t('同时卸载本机 rea-agents 命令行包（npm uninstall -g rea-agents）')),
           ),
         ),
         h('div', { className: 'rea-content rea-divider rea-actions rea-setting-actions' },
-          h(Button, { variant: 'outline', size: 'sm', onClick: close }, '取消'),
+          h(Button, { variant: 'outline', size: 'sm', onClick: close }, t('取消')),
           h(Button, {
             variant: 'primary', size: 'sm', className: 'rea-danger-solid',
             onClick: () => { close(); return onConfirm(removePackage) },
-          }, removePackage ? '彻底卸载' : '确认卸载'),
+          }, removePackage ? t('彻底卸载') : t('确认卸载')),
         ),
       )
     }
@@ -875,11 +1127,11 @@ window.__ModuleLoader__.load({
             className: feedback.error ? 'rea-error' : 'rea-muted',
           }, feedback.title),
           onDismiss && h('button', {
-            type: 'button', className: 'rea-dismiss', 'aria-label': '关闭提示', onClick: onDismiss,
+            type: 'button', className: 'rea-dismiss', 'aria-label': t('关闭提示'), onClick: onDismiss,
           }, '×'),
         ),
         feedback.output && h('pre', {
-          className: 'rea-output rea-muted', dir: 'ltr', tabIndex: 0, 'aria-label': '命令输出',
+          className: 'rea-output rea-muted', dir: 'ltr', tabIndex: 0, 'aria-label': t('命令输出'),
         }, feedback.output),
       )
     }
@@ -888,16 +1140,16 @@ window.__ModuleLoader__.load({
       const [confirmUninstall, setConfirmUninstall] = React.useState(false)
       const busy = Boolean(pending) || updateLookup.checking
       const registration = state.registration?.state
-      const registered = registration === 'aligned' || registration === 'healthy'
+      const registered = registrationHealthy(state)
       const registrationTone = registered ? 'ready' : registration === 'missing' ? 'idle' : registration ? 'attention' : 'idle'
-      const registrationLabel = registered ? 'DSH 已注册'
-        : registration === 'missing' ? 'DSH 未注册'
-          : registration ? 'DSH 注册异常' : 'DSH 注册待确认'
+      const registrationLabel = registered ? t('DSH 已注册')
+        : registration === 'missing' ? t('DSH 未注册')
+          : registration ? t('DSH 注册异常') : t('DSH 注册待确认')
       const toolCount = state.registeredTools ?? 0
       const toolsNotice = toolCount > 0 && registration === 'missing'
-        ? '本机注册已移除，但宿主仍显示已加载工具，可重新检测确认。'
+        ? t('本机注册已移除，但宿主仍显示已加载工具，可重新检测确认。')
         : toolCount === 0 && state.installed
-          ? '工具尚未加载到当前宿主，重新检测后如仍未生效可重启 DSH。'
+          ? t('工具尚未加载到当前宿主，重新检测后如仍未生效可重启 DSH。')
           : null
 
       const canMaintain = state.installed && !['missing', 'unavailable'].includes(state.cli)
@@ -911,49 +1163,49 @@ window.__ModuleLoader__.load({
       }
       const showReinstall = !state.installed && Boolean(state.version)
 
-      return h(Section, { title: '运行状态与更新' },
+      return h(Section, { title: t('运行状态与更新') },
         h('div', { className: 'rea-group' },
           h('div', { className: 'rea-row rea-setting-row' },
             h('div', { className: 'rea-setting-info' },
               h('div', { className: 'rea-overview-title' },
                 h('span', { className: 'rea-overview-name' }, 'REA'),
                 h('span', { className: 'rea-version-pill', dir: state.version ? 'ltr' : undefined },
-                  state.version ?? (state.cli === 'missing' ? '未安装' : '版本待确认'),
+                  state.version ?? (state.cli === 'missing' ? t('未安装') : t('版本待确认')),
                 ),
                 h('span', { className: 'rea-badge', 'data-tone': registrationTone },
                   h(Status, { state: registered ? 'done' : 'idle' }, registrationLabel),
                 ),
                 (state.installed || toolCount > 0) && h('span', { className: 'rea-badge', 'data-tone': toolCount > 0 ? 'ready' : 'idle' },
-                  toolCount > 0 ? `宿主已加载 ${toolCount} 个工具` : '宿主未加载',
+                  toolCount > 0 ? tt`宿主已加载 ${toolCount} 个工具` : t('宿主未加载'),
                 ),
               ),
               h('p', { className: 'rea-muted rea-overview-hint', role: 'status' },
-                updateLookup.checking ? '正在查询 npm 稳定版…' : primary.hint,
+                updateLookup.checking ? t('正在查询 npm 稳定版…') : primary.hint,
               ),
               toolsNotice && h('p', { className: 'rea-muted rea-overview-hint' }, toolsNotice),
             ),
             h('div', { className: 'rea-actions rea-setting-actions' },
               h(Button, { variant: primary.secondary ? 'outline' : 'primary', size: 'sm', disabled: busy, onClick: start },
-                updateLookup.checking ? '检查中…' : primary.label),
+                updateLookup.checking ? t('检查中…') : primary.label),
               showReinstall && h(Button, {
                 variant: 'outline', size: 'sm', disabled: busy,
                 onClick: () => run({ action: 'reinstall' }, 'reinstall'),
-              }, '重装最新版'),
-              !canMaintain && h(DownloadLink, { href: 'https://rea.tools/get-started/', plain: true }, 'REA 安装指南'),
+              }, t('重装最新版')),
+              !canMaintain && h(DownloadLink, { href: 'https://rea.tools/get-started/', plain: true }, t('REA 安装指南')),
             ),
           ),
           canMaintain && h('div', { className: 'rea-row rea-setting-row rea-maintenance-bar rea-divider' },
-            h('span', { className: 'rea-setting-info rea-muted' }, 'DSH 集成维护'),
+            h('span', { className: 'rea-setting-info rea-muted' }, t('DSH 集成维护')),
             h('div', { className: 'rea-actions rea-setting-actions' },
-              h(DownloadLink, { href: 'https://rea.tools/get-started/', plain: true }, 'REA 安装指南'),
+              h(DownloadLink, { href: 'https://rea.tools/get-started/', plain: true }, t('REA 安装指南')),
               primary.operation !== 'repair' && h(Button, {
                 variant: 'ghost', size: 'sm', disabled: busy,
                 onClick: () => run({ action: 'install' }, 'repair'),
-              }, '重新注册'),
+              }, t('重新注册')),
               h(Button, {
                 variant: 'ghost', size: 'sm', className: 'rea-danger-ghost', disabled: busy, 'aria-haspopup': 'dialog',
                 onClick: () => setConfirmUninstall(true),
-              }, '卸载集成'),
+              }, t('卸载集成')),
             ),
           ),
           lifecyclePending && h('div', { className: 'rea-content rea-divider', role: 'status' },
@@ -990,12 +1242,12 @@ window.__ModuleLoader__.load({
       const workspaceFeedback = feedback?.operation === 'workspace' ? feedback : null
       const workspaces = state.workspaces ?? []
 
-      return h(Section, { title: '会话与工作区设置' },
+      return h(Section, { title: t('会话与工作区设置') },
         h('div', { className: 'rea-group' },
           h('div', { className: 'rea-row rea-setting-row' },
             h('div', { className: 'rea-setting-info' },
-              h('div', { className: 'rea-label' }, '新会话默认启用 REA'),
-              h('p', { className: 'rea-muted' }, '未单独配置的工作区将继承此设置；当前会话可随时通过顶部 REA 胶囊切换。'),
+              h('div', { className: 'rea-label' }, t('新会话默认启用 REA')),
+              h('p', { className: 'rea-muted' }, t('未单独配置的工作区将继承此设置，仅对之后新建的会话生效；正在运行的会话可通过顶部 REA 胶囊切换。')),
               defaultFeedback?.error && h('p', { className: 'rea-muted rea-error', role: 'alert' }, defaultFeedback.title),
             ),
             h('div', { className: 'rea-actions rea-setting-actions' },
@@ -1004,25 +1256,25 @@ window.__ModuleLoader__.load({
               ),
               h(Switch, {
                 checked: state.default ?? state.open ?? false,
-                label: '新会话默认启用 REA',
+                label: t('新会话默认启用 REA'),
                 disabled: Boolean(pending),
                 onChange: (open) => run({ open }, 'preference'),
               }),
             ),
           ),
           h('div', { className: 'rea-subhead rea-divider' },
-            h('span', null, '工作区独立规则'),
-            workspaces.length > 0 && h('span', null, `${workspaces.length} 个已记忆`),
+            h('span', null, t('工作区独立规则')),
+            workspaces.length > 0 && h('span', null, tt`${workspaces.length} 个已记忆`),
           ),
           workspaceFeedback?.error && h('div', { className: 'rea-content rea-divider' },
             h('p', { className: 'rea-muted rea-error', role: 'alert' }, workspaceFeedback.title),
           ),
           workspaces.length === 0
             ? h('div', { className: 'rea-ws-empty rea-muted' },
-              '暂无工作区独立规则。在任意会话顶部切换 REA 开关时，会自动记住该工作区的偏好。',
+              t('暂无工作区独立规则。在任意会话顶部切换 REA 开关时，会自动记住该工作区的偏好。'),
             )
-            : h('ul', { className: 'rea-list', 'aria-label': '工作区独立规则' },
-              workspaces.map(({ path, open }) => {
+            : h('ul', { className: 'rea-list', 'aria-label': t('工作区独立规则') },
+              workspaces.map(({ path, open, missing }) => {
                 const { name } = splitWorkspacePath(path)
                 return h('li', { key: path, className: 'rea-ws-item' },
                   h('div', { className: 'rea-ws-main' },
@@ -1033,10 +1285,11 @@ window.__ModuleLoader__.load({
                     ),
                   ),
                   h('div', { className: 'rea-ws-controls' },
-                    h('span', { className: 'rea-badge', 'data-tone': open ? 'ready' : 'idle' }, open ? '已启用' : '已关闭'),
+                    missing && h('span', { className: 'rea-badge', 'data-tone': 'attention', title: t('该目录已不存在，可以重置此规则') }, t('目录不存在')),
+                    h('span', { className: 'rea-badge', 'data-tone': open ? 'ready' : 'idle' }, open ? t('已启用') : t('已关闭')),
                     h(Switch, {
                       checked: open,
-                      label: `工作区 ${path} 启用 REA`,
+                      label: tt`工作区 ${path} 启用 REA`,
                       disabled: Boolean(pending),
                       onChange: (nextOpen) => run({ workspace: path, open: nextOpen }, 'workspace'),
                     }),
@@ -1044,10 +1297,10 @@ window.__ModuleLoader__.load({
                       variant: 'ghost',
                       size: 'sm',
                       disabled: Boolean(pending),
-                      title: '移除独立规则，恢复继承全局默认',
-                      'aria-label': `重置工作区 ${path}`,
+                      title: t('移除独立规则，恢复继承全局默认'),
+                      'aria-label': tt`重置工作区 ${path}`,
                       onClick: () => run({ action: 'reset-workspace', workspace: path }, 'workspace'),
-                    }, '重置'),
+                    }, t('重置')),
                   ),
                 )
               }),
@@ -1097,11 +1350,11 @@ window.__ModuleLoader__.load({
       const needsCheck = Boolean(checked && configured && !available)
       const state = available ? 'ready' : needsCheck ? 'attention' : 'idle'
       const tone = available ? 'ready' : needsCheck ? 'attention' : configured ? 'info' : 'idle'
-      const status = available ? '可用'
-        : needsCheck ? '需检查'
-          : configured ? '已配置，待验证'
-            : checked ? '未配置'
-              : '待验证'
+      const status = available ? t('可用')
+        : needsCheck ? t('需检查')
+          : configured ? t('已配置，待验证')
+            : checked ? t('未配置')
+              : t('待验证')
       return { id, state, tone, status, needsCheck }
     }
 
@@ -1113,8 +1366,8 @@ window.__ModuleLoader__.load({
       const trimmed = draft.trim()
       const canSave = !busy && trimmed.length > 0 && trimmed !== savedValue
       const placeholder = fromHostEnv
-        ? '已由宿主环境变量设置（可填写绝对路径覆盖）'
-        : (ENV_PLACEHOLDERS[varName] ?? `填写 ${varName} 的绝对路径`)
+        ? t('已由宿主环境变量设置（可填写绝对路径覆盖）')
+        : (ENV_PLACEHOLDERS[varName] ?? tt`填写 ${varName} 的绝对路径`)
 
       const submit = (event) => {
         event?.preventDefault?.()
@@ -1126,9 +1379,9 @@ window.__ModuleLoader__.load({
           h('div', { className: 'rea-env-main' },
             h(StateDot, { state: set ? 'done' : 'idle', size: 7 }),
             h('code', { className: 'rea-env-code', dir: 'ltr' }, varName),
-            h('span', { className: 'rea-env-state', 'data-set': String(Boolean(set)) }, set ? '已设置' : '未设置'),
+            h('span', { className: 'rea-env-state', 'data-set': String(Boolean(set)) }, set ? t('已设置') : t('未设置')),
           ),
-          h(CopyButton, { text: varName, label: '复制变量', ariaLabel: `复制环境变量 ${varName}` }),
+          h(CopyButton, { text: varName, label: t('复制变量'), ariaLabel: tt`复制环境变量 ${varName}` }),
         ),
         h('form', { className: 'rea-env-edit', onSubmit: submit },
           h('input', {
@@ -1138,7 +1391,7 @@ window.__ModuleLoader__.load({
             value: draft,
             placeholder,
             disabled: busy,
-            'aria-label': `${varName} 路径`,
+            'aria-label': tt`${varName} 路径`,
             onChange: (event) => setDraft(event?.target?.value ?? ''),
           }),
           h(Button, {
@@ -1146,17 +1399,17 @@ window.__ModuleLoader__.load({
             variant: 'outline',
             size: 'sm',
             disabled: !canSave,
-            'aria-label': `保存 ${varName}`,
+            'aria-label': tt`保存 ${varName}`,
             onClick: submit,
-          }, '保存并检测'),
+          }, t('保存并检测')),
           savedValue && h(Button, {
             type: 'button',
             variant: 'ghost',
             size: 'sm',
             disabled: busy,
-            'aria-label': `清除 ${varName}`,
+            'aria-label': tt`清除 ${varName}`,
             onClick: () => { setDraft(''); return onSave(varName, '') },
-          }, '清除'),
+          }, t('清除')),
         ),
       )
     }
@@ -1164,7 +1417,7 @@ window.__ModuleLoader__.load({
     function EngineRow({ engine, expanded, onToggle, pending, feedback, run, dismissFeedback }) {
       const detailId = React.useId()
       const { id, available, variables, checks, version, canInstall, installCommand } = engine
-      const provider = providers[id] ?? { name: id, description: '可选分析引擎。' }
+      const provider = providers[id] ?? { name: id, description: t('可选分析引擎。') }
       const { state, tone, status } = engineMeta(engine)
       const mark = state === 'ready' ? '✓' : state === 'attention' ? '!' : '−'
       const busy = Boolean(pending)
@@ -1222,12 +1475,12 @@ window.__ModuleLoader__.load({
         ),
         expanded && h('div', { id: detailId, className: 'rea-engine-detail' },
           provider.setup && h('div', { className: 'rea-detail-block' },
-            h('div', { className: 'rea-detail-label' }, '配置说明'),
+            h('div', { className: 'rea-detail-label' }, t('配置说明')),
             h('p', { className: 'rea-detail-guide' }, provider.setup),
           ),
           variables?.length > 0 && h('div', { className: 'rea-detail-block' },
-            h('div', { className: 'rea-detail-label' }, '环境变量与路径配置'),
-            h('ul', { className: 'rea-list rea-env-list', 'aria-label': `${provider.name} 环境变量` },
+            h('div', { className: 'rea-detail-label' }, t('环境变量与路径配置')),
+            h('ul', { className: 'rea-list rea-env-list', 'aria-label': tt`${provider.name} 环境变量` },
               variables.map((variable) => h(EnvVarEditor, {
                 key: variable.name,
                 variable,
@@ -1239,23 +1492,23 @@ window.__ModuleLoader__.load({
           (installing || savingEnv) && h('div', { role: 'status', className: 'rea-muted' },
             h(Status, { state: 'ongoing' },
               installing
-                ? `正在执行 ${installCommand || 'Homebrew 安装'}（可能需要几分钟）…`
+                ? tt`正在执行 ${installCommand || t('Homebrew 安装')}（可能需要几分钟）…`
                 : operationMeta(envOp)?.pending,
             ),
           ),
           rowFeedback && h(Feedback, { feedback: rowFeedback, onDismiss: dismissFeedback }),
           available
             ? h('div', { className: 'rea-diag-box', 'data-tone': 'ready' },
-              h('p', null, '本机检测通过，在启用 REA 的会话中可直接调用此引擎。'),
+              h('p', null, t('本机检测通过，在启用 REA 的会话中可直接调用此引擎。')),
               passedDetails.length > 0 && h('div', { className: 'rea-path-code', dir: 'ltr' }, passedDetails.join(' · ')),
             )
             : parsedHints.length > 0 && h('div', { className: 'rea-detail-block' },
-              h('div', { className: 'rea-detail-label' }, state === 'attention' ? '异常诊断（rea doctor）' : '检测详情（rea doctor）'),
+              h('div', { className: 'rea-detail-label' }, state === 'attention' ? t('异常诊断（rea doctor）') : t('检测详情（rea doctor）')),
               h('div', { className: 'rea-diag-box', 'data-tone': state },
                 parsedHints.map((item, idx) => h('p', { key: idx, dir: 'ltr' }, renderDiagnosticSegments(item.segments))),
                 hashes.map((hash) => h('div', { key: hash, className: 'rea-hash-row' },
                   h('span', { className: 'rea-hash-val', dir: 'ltr', title: hash }, `SHA-256: ${hash}`),
-                  h(CopyButton, { text: hash, label: '复制 SHA-256', ariaLabel: '复制 SHA-256 校验值' }),
+                  h(CopyButton, { text: hash, label: t('复制 SHA-256'), ariaLabel: t('复制 SHA-256 校验值') }),
                 )),
               ),
             ),
@@ -1266,7 +1519,7 @@ window.__ModuleLoader__.load({
               disabled: busy,
               title: installCommand || undefined,
               onClick: install,
-            }, installing ? '安装中…' : `一键安装 ${provider.name}`),
+            }, installing ? t('安装中…') : tt`一键安装 ${provider.name}`),
             links.map((link) => h(DownloadLink, { key: link.key, href: link.href, label: link.label }, link.text)),
           ),
         ),
@@ -1276,8 +1529,9 @@ window.__ModuleLoader__.load({
     function Environment({ state, pending, feedback, load, run, dismissFeedback }) {
       const [toggled, setToggled] = React.useState({})
       const checking = pending === 'load'
+      const settling = !checking && state.checks === 'pending'
       const checkFailure = feedback?.operation === 'load' ? feedback : null
-      const checkedAt = state.checkedAt && new Date(state.checkedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      const checkedAt = state.checkedAt && new Date(state.checkedAt).toLocaleTimeString(LOCALE === 'zh' ? 'zh-CN' : undefined, { hour: '2-digit', minute: '2-digit' })
 
       const rawEngines = [...(state.engines ?? [])]
       const javaHome = rawEngines.flatMap(({ variables }) => variables ?? []).find(({ name }) => name === 'JAVA_HOME')
@@ -1308,7 +1562,7 @@ window.__ModuleLoader__.load({
         })),
         ...(extraEngines.length > 0 ? [{
           id: 'other',
-          title: '其他引擎',
+          title: t('其他引擎'),
           items: extraEngines,
         }] : []),
       ].filter((group) => group.items.length > 0)
@@ -1323,26 +1577,26 @@ window.__ModuleLoader__.load({
       }
 
       const metaParts = [
-        `可用 ${counts.ready} / ${counts.all}`,
-        counts.attention > 0 ? `需检查 ${counts.attention}` : null,
-        checkedAt ? `上次检测 ${checkedAt}` : null,
-        '点击条目展开配置与详情',
+        tt`可用 ${counts.ready} / ${counts.all}`,
+        counts.attention > 0 ? tt`需检查 ${counts.attention}` : null,
+        checkedAt ? tt`上次检测 ${checkedAt}` : null,
+        t('点击条目展开配置与详情'),
       ].filter(Boolean)
 
       return h(Section, {
-        title: '分析引擎与依赖',
-        meta: h('span', { className: 'rea-muted' }, checking ? '正在重新检测本机状态…' : metaParts.join(' · ')),
+        title: t('分析引擎与依赖'),
+        meta: h('span', { className: 'rea-muted' }, checking ? t('正在重新检测本机状态…') : settling ? t('体检仍在后台运行，完成后会自动更新…') : metaParts.join(' · ')),
         actions: h(Button, {
           variant: 'ghost', size: 'sm', icon: h(IconRefreshOutlineRegular, { size: 14 }),
           disabled: Boolean(pending), onClick: () => load(true),
-        }, checking ? '检测中…' : '重新检测'),
+        }, checking ? t('检测中…') : t('重新检测')),
       },
         h('div', { className: 'rea-group' },
           checkFailure && h('div', { className: 'rea-content' }, h(Feedback, { feedback: checkFailure })),
           groups.map((group, groupIndex) => h('div', { key: group.id },
             h('div', { className: groupIndex === 0 && !checkFailure ? 'rea-subhead' : 'rea-subhead rea-divider' },
               h('span', null, group.title),
-              h('span', null, `${group.items.length} 项`),
+              h('span', null, tt`${group.items.length} 项`),
             ),
             h('ul', { className: 'rea-list', 'aria-label': group.title },
               group.items.map((engine) => h(EngineRow, {
@@ -1365,8 +1619,8 @@ window.__ModuleLoader__.load({
       const [open, setOpen] = React.useState(false)
       const bodyId = React.useId()
       const examples = [
-        '用 REA 查看 <应用路径> 的 Electron 入口模块和 preload 脚本。',
-        '用 REA 列出 <文件路径> 中 .NET 程序集的公开类型和入口点。',
+        t('用 REA 查看 <应用路径> 的 Electron 入口模块和 preload 脚本。'),
+        t('用 REA 列出 <文件路径> 中 .NET 程序集的公开类型和入口点。'),
       ]
       return h('section', null,
         h('div', { className: 'rea-group' },
@@ -1378,11 +1632,11 @@ window.__ModuleLoader__.load({
               'aria-controls': bodyId,
               onClick: () => setOpen((v) => !v),
             },
-              h('div', { className: 'rea-label' }, 'REA 会话示例'),
-              h('p', { className: 'rea-muted' }, '开启 REA 后可直接发给助手的逆向分析提示词模板'),
+              h('div', { className: 'rea-label' }, t('REA 会话示例')),
+              h('p', { className: 'rea-muted' }, t('开启 REA 后可直接发给助手的逆向分析提示词模板')),
             ),
             h('div', { className: 'rea-disclosure-right' },
-              h(DownloadLink, { href: 'https://github.com/morluto/rea', plain: true }, 'REA 文档'),
+              h(DownloadLink, { href: 'https://github.com/morluto/rea', plain: true }, t('REA 文档')),
               h('button', {
                 type: 'button',
                 className: 'rea-disclosure-chevron-btn',
@@ -1398,9 +1652,9 @@ window.__ModuleLoader__.load({
                 h('span', { className: 'rea-prompt-quote', 'aria-hidden': true }, '›'),
                 h('span', null, prompt),
               ),
-              h(CopyButton, { text: prompt, ariaLabel: `复制示例：${prompt}` }),
+              h(CopyButton, { text: prompt, ariaLabel: tt`复制示例：${prompt}` }),
             )),
-            h('p', { className: 'rea-muted' }, '仅在本次会话临时使用时，可调用 rea_gate 并将 remember 设为 false。'),
+            h('p', { className: 'rea-muted' }, t('助手调用 rea_gate 的 on / off 默认只对本次会话生效；需要同时保存到工作区时，将 remember 设为 true。')),
           ),
         ),
       )
@@ -1426,35 +1680,35 @@ window.__ModuleLoader__.load({
             onClick: () => setOpen((v) => !v),
           },
             h('div', null,
-              h('div', { className: 'rea-label' }, '高级诊断'),
-              h('p', { className: 'rea-muted' }, '查看 DSH 配置文件路径与宿主客户端模块图状态'),
+              h('div', { className: 'rea-label' }, t('高级诊断')),
+              h('p', { className: 'rea-muted' }, t('查看 DSH 配置文件路径与宿主客户端模块图状态')),
             ),
             h(Chevron, { open }),
           ),
           open && h('div', { id: bodyId, className: 'rea-divider' },
             configPath && h('div', { className: 'rea-row rea-setting-row' },
               h('div', { className: 'rea-setting-info' },
-                h('div', { className: 'rea-label' }, 'DSH 注册配置路径'),
+                h('div', { className: 'rea-label' }, t('DSH 注册配置路径')),
                 h('div', { className: 'rea-path-code', dir: 'ltr' }, configPath),
               ),
               h('div', { className: 'rea-actions rea-setting-actions' },
-                h(CopyButton, { text: configPath, label: '复制路径', ariaLabel: '复制 DSH 配置路径' }),
+                h(CopyButton, { text: configPath, label: t('复制路径'), ariaLabel: t('复制 DSH 配置路径') }),
               ),
             ),
             h('div', { className: 'rea-row rea-setting-row' },
               h('div', { className: 'rea-setting-info' },
-                h('div', { className: 'rea-label' }, '插件诊断'),
+                h('div', { className: 'rea-label' }, t('插件诊断')),
                 h('div', { role: 'status', className: 'rea-muted' },
-                  !diagnostic ? '检查宿主是否已发布面板模块。'
-                    : diagnostic === 'checking' ? '正在检查模块图…'
-                      : diagnostic === 'unavailable' ? '无法读取模块图，请重试。'
-                        : diagnostic.selfPresent ? `模块已加入图（${diagnostic.rev}）` : '模块尚未加入图。',
+                  !diagnostic ? t('检查宿主是否已发布面板模块。')
+                    : diagnostic === 'checking' ? t('正在检查模块图…')
+                      : diagnostic === 'unavailable' ? t('无法读取模块图，请重试。')
+                        : diagnostic.selfPresent ? tt`模块已加入图（${diagnostic.rev}）` : t('模块尚未加入图。'),
                 ),
               ),
               h('div', { className: 'rea-actions rea-setting-actions' },
                 h(Button, {
                   variant: 'outline', size: 'sm', disabled: diagnostic === 'checking', onClick: checkModule,
-                }, diagnostic === 'checking' ? '检查中…' : '检查模块图'),
+                }, diagnostic === 'checking' ? t('检查中…') : t('检查模块图')),
               ),
             ),
           ),
@@ -1473,11 +1727,11 @@ window.__ModuleLoader__.load({
           h(Environment, { ...data, key: 'environment' }),
           h(UsageGuide, { key: 'usage' }),
           h(AdvancedDiagnostics, { state, key: 'diagnostics' }),
-        ] : h(Section, { title: '运行状态与更新' },
+        ] : h(Section, { title: t('运行状态与更新') },
           h('div', { className: 'rea-group rea-row rea-setting-row' },
-            pending ? h('div', { role: 'status' }, h(Status, { state: 'ongoing' }, '正在读取本机状态…'))
-              : h(Feedback, { feedback: feedback ?? { error: true, title: '无法读取本机状态，请重试。' } }),
-            !pending && h(Button, { variant: 'outline', size: 'sm', onClick: () => load(true) }, '重试'),
+            pending ? h('div', { role: 'status' }, h(Status, { state: 'ongoing' }, t('正在读取本机状态…')))
+              : h(Feedback, { feedback: feedback ?? { error: true, title: t('无法读取本机状态，请重试。') } }),
+            !pending && h(Button, { variant: 'outline', size: 'sm', onClick: () => load(true) }, t('重试')),
           ),
         ),
       )
@@ -1489,8 +1743,8 @@ window.__ModuleLoader__.load({
           h('header', { className: 'rea-page-head' },
             h('div', { className: 'rea-logo' }, h(ReaIcon, { size: 18 })),
             h('div', null,
-              h('h1', null, 'REA 管理'),
-              h('p', { className: 'rea-muted rea-page-sub' }, '管理本机 REA 集成、工作区门控偏好与可选分析引擎'),
+              h('h1', null, t('REA 管理')),
+              h('p', { className: 'rea-muted rea-page-sub' }, t('管理本机 REA 集成、工作区门控偏好与可选分析引擎')),
             ),
           ),
           h(GateControls),
@@ -1529,14 +1783,19 @@ window.__ModuleLoader__.load({
           if (current && next && next.ok !== false) setState(next)
           return next
         }
+        // A hidden page has nobody to show the chip to; skip the request and
+        // catch up as soon as the page is visible again.
+        const hidden = () => typeof document !== 'undefined' && document.hidden === true
         const schedule = () => {
           timer = setTimeout(async () => {
             if (stopped) return
-            await read()
+            if (!hidden()) await read()
             if (!stopped) schedule()
-          }, 5_000)
+          }, CHIP_POLL_MS)
           timer?.unref?.()
         }
+        const onVisible = () => { if (!hidden() && !stopped) void read() }
+        if (typeof document !== 'undefined') document.addEventListener?.('visibilitychange', onVisible)
         void read().then((next) => {
           if (current && next?.installed === false) void read(true)
           if (!stopped) schedule()
@@ -1545,6 +1804,7 @@ window.__ModuleLoader__.load({
           current = false
           stopped = true
           if (timer) clearTimeout(timer)
+          if (typeof document !== 'undefined') document.removeEventListener?.('visibilitychange', onVisible)
         }
       }, [sessionId])
 
@@ -1552,6 +1812,7 @@ window.__ModuleLoader__.load({
 
       const installed = state.installed !== false
       const open = state.open === true
+      const exposed = installed && !open && state.exposed === true
       const toggle = async () => {
         if (busy) return
         setBusy(true)
@@ -1559,7 +1820,7 @@ window.__ModuleLoader__.load({
         const body = installed ? { session: sessionId, open: !open } : { session: sessionId, action: 'install' }
         const next = await post(body)
         if (typeof next?.installed === 'boolean') setState(next)
-        if (!next || next.ok === false) setMessage(next?.message || '无法切换 REA')
+        if (!next || next.ok === false) setMessage(next?.message || t('无法切换 REA'))
         setBusy(false)
       }
 
@@ -1567,10 +1828,13 @@ window.__ModuleLoader__.load({
         active: installed && open,
         onClick: toggle,
         disabled: busy,
-        title: message || (state.sessionKnown ? `本会话可见 ${state.tools} 个 REA 工具` : state.workspace) || 'REA',
+        title: message
+          || (exposed ? tt`门控已关闭，但本会话仍可见 ${state.tools} 个 REA 工具` : null)
+          || (state.sessionKnown ? tt`本会话可见 ${state.tools} 个 REA 工具` : state.workspace)
+          || 'REA',
         'aria-pressed': installed ? open : undefined,
       }, h(StateDot, { state: busy ? 'ongoing' : installed && open ? 'done' : 'idle', size: 8 }),
-      installed ? (open ? 'REA 开' : 'REA 关') : 'REA 未安装')
+      installed ? (open ? t('REA 开') : exposed ? t('REA 关（未生效）') : t('REA 关')) : t('REA 未安装'))
     }
 
     function ReaIcon(props) {

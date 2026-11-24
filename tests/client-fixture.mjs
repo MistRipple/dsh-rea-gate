@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 
-export function mountClient() {
+export function mountClient({ locale = 'zh-CN' } = {}) {
   let hooks
   let hookIndex
   let dirty
@@ -56,6 +56,8 @@ export function mountClient() {
 
   let entry
   const window = { __ModuleLoader__: { load: (value) => { entry = value } } }
+  // The suites assert the Chinese source strings; the English table has its own test.
+  globalThis.__REA_GATE_LOCALE__ = locale
   new Function('window', readFileSync(new URL('../client.js', import.meta.url), 'utf8'))(window)
   const plugin = entry.factory((id) => {
     if (id === 'react') return React
