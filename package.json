@@ -1,6 +1,6 @@
 {
   "name": "dsh-rea-gate",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Per-session gate for REA: keep the reverse-engineering toolset installed but expose it only in the sessions that ask for it.",
   "license": "MIT",
   "author": "MistRipple",
