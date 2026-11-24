@@ -11,7 +11,7 @@
  * call, tools added by an update) is retried by a sweep and reported through
  * `exposed`, instead of silently leaving the session unmasked.
  *
- * Layout: lib/state.js is the saved policy and workspace keys, lib/rea-cli.js
+ * Layout: lib/state.js is the saved default and engine settings, lib/rea-cli.js
  * the REA/npm/brew calls, lib/engines.js engine settings; this file is the gate,
  * the owner routes and the agent tool.
  */
@@ -34,14 +34,7 @@ import {
   normalizeEnvValue,
   probeJavaHome,
 } from './lib/engines.js'
-import {
-  canonicalWorkspace,
-  isInside,
-  isOpen,
-  readState,
-  ruleFor,
-  updateState,
-} from './lib/state.js'
+import { isOpen, readState, updateState } from './lib/state.js'
 
 /**
  * A linked bundle directory cannot resolve the dsh installation's own packages,
@@ -75,7 +68,7 @@ function translator(request) {
 }
 const english = (_chinese, text) => text
 
-/** The directory the session works in; the key its choice is remembered under. */
+/** The directory the session works in, for display only. */
 function workspaceOf(agent) {
   const candidates = [
     agent?.session?.header?.cwd,
@@ -85,8 +78,7 @@ function workspaceOf(agent) {
     agent?.cwd,
   ]
   for (const value of candidates) {
-    const key = typeof value === 'string' && value.length > 0 ? canonicalWorkspace(value) : null
-    if (key) return key
+    if (typeof value === 'string' && value.length > 0) return value
   }
   return null
 }
@@ -124,7 +116,7 @@ export function apply(ctx) {
   const closedAgents = new Set()
   /** closed agents that could not be fully masked yet */
   const pendingGates = new Set()
-  /** agent -> { open, temporary }; mirrored on the agent so a reload keeps it */
+  /** agent -> { open }; mirrored on the agent so a reload keeps it */
   const agentChoices = new WeakMap()
   /** session id -> { agent, workspace }, for the browser control */
   const sessions = new Map()
@@ -165,7 +157,7 @@ export function apply(ctx) {
     const entry = { agent, workspace: workspaceOf(agent) }
     sessions.set(sessionId, entry)
     // A lazily resolved session must match the policy before its state is read.
-    if (!getChoice(agent)) applyChoice(agent, isOpen(readState(), entry.workspace))
+    if (!getChoice(agent)) applyChoice(agent, isOpen(readState()))
     return entry
   }
 
@@ -414,9 +406,12 @@ export function apply(ctx) {
     gates.delete(agent)
   }
 
-  /** `temporary` marks a choice that must not be replaced by the saved policy on reload. */
-  function applyChoice(agent, open, { temporary = false } = {}) {
-    setChoice(agent, { open, temporary })
+  /**
+   * Set one session's own switch. Saved rules decide a session's first state
+   * only; after that the session keeps its choice, also across a plugin reload.
+   */
+  function applyChoice(agent, open) {
+    setChoice(agent, { open })
     if (open) {
       openGate(agent)
     } else {
@@ -448,22 +443,6 @@ export function apply(ctx) {
     return agents
   }
 
-  /**
-   * After a workspace rule changes, bring every live session at or below that
-   * directory in line with it, not only the one the change came from.
-   */
-  function reapplyWorkspace(workspace) {
-    const state = readState()
-    for (const agent of knownAgents()) {
-      try {
-        const where = workspaceOf(agent)
-        if (where && isInside(where, workspace)) applyChoice(agent, isOpen(state, where))
-      } catch (error) {
-        log?.warn?.(`could not apply the REA rule to a running session: ${error?.message ?? error}`)
-      }
-    }
-  }
-
   /** Apply the saved policy to agents that existed before this plugin instance loaded. */
   function reconcileExistingAgents() {
     if (!liveAgents?.list) return
@@ -486,10 +465,10 @@ export function apply(ctx) {
         if (typeof sessionId === 'string' && !sessions.has(sessionId)) {
           sessions.set(sessionId, { agent, workspace })
         }
-        // A session-only choice made before the reload is still the user's choice.
+        // A choice made before the reload is still that session's choice; only
+        // a session this plugin never saw takes the saved policy.
         const previous = getChoice(agent)
-        if (previous?.temporary) applyChoice(agent, previous.open, { temporary: true })
-        else applyChoice(agent, isOpen(readState(), workspace))
+        applyChoice(agent, previous ? previous.open : isOpen(readState()))
       } catch (error) {
         log?.warn?.(`could not apply the REA gate to an existing session: ${error?.message ?? error}`)
       }
@@ -521,7 +500,7 @@ export function apply(ctx) {
       // The first agent of a session owns the entry; a later agent that reports
       // the same id (a sub-agent) is still gated but must not displace it.
       if (typeof sessionId === 'string' && !sessions.has(sessionId)) sessions.set(sessionId, { agent, workspace })
-      applyChoice(agent, isOpen(readState(), workspace))
+      applyChoice(agent, isOpen(readState()))
     } catch (error) {
       log?.warn?.(`could not apply the REA gate to a new session: ${error?.message ?? error}`)
     }
@@ -536,35 +515,9 @@ export function apply(ctx) {
     } catch {}
   })
 
-  /**
-   * Persist a default or workspace choice. A workspace choice reaches every
-   * live session in that workspace; the global default only governs sessions
-   * created afterwards, so flipping it never changes a running conversation's
-   * tool list.
-   */
-  function setOpen(workspace, open, agent) {
-    const saved = updateState((state) => {
-      if (workspace) state.workspaces[workspace] = open
-      else state.default = open
-    })
-    if (workspace && saved) reapplyWorkspace(workspace)
-    if (agent) applyChoice(agent, open)
-    return saved
-  }
-
-  /**
-   * Where a session-triggered save goes: the directory whose rule already
-   * governs this session (so every session under that rule moves together),
-   * or the session's own directory when no rule exists yet.
-   */
-  function ruleTarget(workspace) {
-    return ruleFor(readState(), workspace)?.path ?? workspace
-  }
-
-  function resetWorkspace(workspace) {
-    const saved = updateState((state) => { delete state.workspaces[workspace] })
-    if (saved) reapplyWorkspace(workspace)
-    return saved
+  /** Persist the default that new sessions start from. Running sessions keep their own switch. */
+  function setDefault(open) {
+    return updateState((state) => { state.default = open })
   }
 
   function stateFor(sessionId, tr = english) {
@@ -575,7 +528,7 @@ export function apply(ctx) {
     sweepGates(registeredNames)
     const registered = registeredNames.length
     const tools = entry?.agent ? reaNames(ctx, entry.agent).length : 0
-    const open = (entry?.agent && getChoice(entry.agent)?.open) ?? isOpen(state, workspace)
+    const open = (entry?.agent && getChoice(entry.agent)?.open) ?? isOpen(state)
     const { report, cli, checkedAt } = diagnosis
     const identity = report?.identity
     const registration = (identity?.registrations ?? report?.registrations)?.find((item) => item.client === 'dsh')
@@ -589,8 +542,6 @@ export function apply(ctx) {
       // The gate is closed but the session can still see REA tools.
       exposed: open === false && tools > 0,
       workspace,
-      // Where the session's rule comes from when it is inherited from a parent directory.
-      ruleSource: ruleFor(state, workspace)?.path ?? null,
       installed,
       registeredTools: registered,
       tools,
@@ -610,9 +561,6 @@ export function apply(ctx) {
       default: state.default,
       sessionKnown: entry !== undefined,
       capabilities: { homebrew: Boolean(brewPrefix) },
-      workspaces: Object.entries(state.workspaces)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([path, rule]) => ({ path, open: rule === true, missing: !existsSync(path) })),
       engines: doctorEngineState(report, state, brewPrefix, tr),
     }
   }
@@ -701,14 +649,6 @@ export function apply(ctx) {
               const result = await setEngineEnv(body.values, tr)
               return json({ ...stateFor(undefined, tr), ...result }, outcomeStatus(result))
             }
-            if (body?.action === 'reset-workspace' && typeof body.workspace === 'string' && body.workspace.length > 0) {
-              const saved = resetWorkspace(canonicalWorkspace(body.workspace) ?? body.workspace)
-              return json({
-                ...stateFor(undefined, tr),
-                ok: saved,
-                message: saved ? '' : tr('无法保存 REA 门控偏好。', 'Could not save the REA gate preference.'),
-              })
-            }
             if (body?.action === 'check-update') {
               const result = await runCommand('npm', ['view', 'rea-agents', 'dist-tags.latest', '--json'], 15_000)
               const latest = parseJsonOutput(result)
@@ -719,44 +659,24 @@ export function apply(ctx) {
             if (typeof body?.open !== 'boolean' || body.action !== undefined) {
               return json({ ok: false, message: 'Expected an open/closed choice.' }, 400)
             }
-            if (body.workspace !== undefined &&
-                (typeof body.workspace !== 'string' || body.workspace.length === 0 || body.session !== undefined)) {
-              return json({ ok: false, message: 'Expected one workspace path.' }, 400)
+            // Per-workspace rules are gone. A stale client must not have its
+            // workspace request read as a change to the global default.
+            if (body.workspace !== undefined || body.remember !== undefined) {
+              return json({ ok: false, message: 'Per-workspace rules are no longer supported.' }, 400)
             }
-            if (body.remember !== undefined && typeof body.remember !== 'boolean') {
-              return json({ ok: false, message: 'Expected remember to be a boolean.' }, 400)
-            }
+            // `{ session, open }` switches that one session and saves nothing;
+            // `{ open }` alone sets the default that new sessions start from.
             const entry = body.session !== undefined ? sessionEntry(body.session) : undefined
             if (body.session !== undefined && !entry) {
               return json({ ok: false, message: 'This session is not active in the host.' }, 404)
             }
-            if (body.remember === false && !entry) {
-              return json({ ok: false, message: 'A temporary change requires an active session.' }, 400)
+            if (entry) {
+              applyChoice(entry.agent, body.open)
+              return json({ ...stateFor(body.session, tr), ok: true })
             }
-            if (body.remember === false) {
-              applyChoice(entry.agent, body.open, { temporary: true })
-              return json({ ...stateFor(body.session, tr), remembered: false, ok: true })
-            }
-            const workspace = body.workspace !== undefined
-              ? (canonicalWorkspace(body.workspace) ?? body.workspace)
-              : entry?.workspace ? ruleTarget(entry.workspace) : null
-            // A session-scoped control with no workspace cannot be remembered.
-            // Apply it to that session instead of silently changing the global
-            // default; an explicit `remember: true` is rejected.
-            if (entry && workspace === null) {
-              if (body.remember === true) {
-                return json({
-                  ok: false,
-                  message: 'This session has no workspace directory; pass remember:false for a temporary change.',
-                }, 400)
-              }
-              applyChoice(entry.agent, body.open, { temporary: true })
-              return json({ ...stateFor(body.session, tr), remembered: false, ok: true })
-            }
-            const saved = setOpen(workspace, body.open, entry?.agent)
+            const saved = setDefault(body.open)
             return json({
-              ...stateFor(body.session, tr),
-              remembered: saved && workspace !== null,
+              ...stateFor(undefined, tr),
               ok: saved,
               message: saved ? '' : tr('无法保存 REA 门控偏好。', 'Could not save the REA gate preference.'),
             })
@@ -793,23 +713,19 @@ export function apply(ctx) {
   // The model may only read or flip the gate. Installing, updating and removing
   // REA run global package-manager commands, so they stay behind the owner's
   // panel: an agent that is analysing an untrusted sample must not be able to
-  // reach them, whatever the sample tells it to do. For the same reason a
-  // model-initiated change is session-only unless `remember` is explicitly true.
+  // reach them, whatever the sample tells it to do. A model-initiated change is
+  // session-only and never touches the saved default.
   const definition = {
     name: 'rea_gate',
     description:
       'Read or change whether this session can use the REA reverse-engineering tools. '
-      + 'A change applies to this session only unless remember is true, which also saves it for the workspace directory.',
+      + 'A change applies to this session only.',
     parameters: {
       action: {
         type: 'string',
         required: true,
         enum: ['status', 'on', 'off'],
         description: 'status reports the current state; on exposes REA tools to this session; off hides them.',
-      },
-      remember: {
-        type: 'boolean',
-        description: 'For on or off, set true to also save the choice for this workspace. The default changes only this session.',
       },
     },
     output: {
@@ -818,7 +734,6 @@ export function apply(ctx) {
     },
     async execute(args, exec) {
       const agent = exec?.agent
-      const workspace = workspaceOf(agent)
       const action = args?.action
 
       if (action !== 'status' && action !== 'on' && action !== 'off') {
@@ -827,32 +742,16 @@ export function apply(ctx) {
       }
 
       if (action === 'on' || action === 'off') {
-        const open = action === 'on'
-        if (args.remember === true) {
-          if (!workspace) {
-            return 'REA gate: this session has no workspace directory, so the choice cannot be remembered. '
-              + 'Call again without remember to change this session only.'
-          }
-          if (!setOpen(ruleTarget(workspace), open, agent)) {
-            return `REA is now ${open ? 'available' : 'hidden'} in this session, but the choice could not be saved for ${workspace}.`
-          }
-        } else if (agent) {
-          applyChoice(agent, open, { temporary: true })
-        } else {
-          return 'REA gate: no active session to change.'
-        }
+        if (!agent) return 'REA gate: no active session to change.'
+        applyChoice(agent, action === 'on')
       }
 
       const state = readState()
-      const open = (agent && getChoice(agent)?.open) ?? isOpen(state, workspace)
+      const open = (agent && getChoice(agent)?.open) ?? isOpen(state)
       const count = agent ? reaNames(ctx, agent).length : 0
-      const rule = ruleFor(state, workspace)
-      const saved = rule
-        ? `saved as ${rule.open ? 'open' : 'closed'}${rule.path === workspace ? '' : ` via ${rule.path}`}`
-        : `no saved rule, global default ${state.default ? 'open' : 'closed'}`
       const lines = [
         `REA is ${open ? 'available' : 'hidden'} in this session.`,
-        workspace ? `Workspace: ${workspace} (${saved})` : 'Workspace: none',
+        `New sessions start ${state.default ? 'open' : 'closed'} (set in the REA panel).`,
         `REA tools visible in this session: ${count}.`,
         open ? 'Turn it off with action "off".' : 'Turn it on with action "on".',
       ]

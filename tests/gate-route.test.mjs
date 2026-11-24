@@ -71,46 +71,24 @@ const toggle = (body) => routes.get('/api/dsh-rea-gate/toggle').fetch(
 )
 const readState = () => JSON.parse(readFileSync(stateFile, 'utf8'))
 
-writeFileSync(stateFile, JSON.stringify({ default: false, workspaces: {} }))
+writeFileSync(stateFile, JSON.stringify({ default: false }))
 const noWorkspace = createAgent('no-workspace')
 const withWorkspace = createAgent('with-workspace', '/projects/workspace')
 
-// A chip toggle in a session without a workspace applies to that session only.
-const temporary = await toggle({ session: 'no-workspace', open: true })
-assert.equal(temporary.status, 200)
-const temporaryBody = await temporary.json()
-assert.equal(temporaryBody.open, true)
-assert.equal(temporaryBody.remembered, false)
-assert.equal(temporaryBody.default, false)
+// A switch aimed at a session changes that session only and saves nothing.
+const on = await toggle({ session: 'no-workspace', open: true })
+assert.equal(on.status, 200)
+const onBody = await on.json()
+assert.equal(onBody.open, true)
+assert.equal(onBody.default, false)
 assert.equal(readState().default, false)
 assert.deepEqual(noWorkspace.ctx.visible(), toolNames)
+assert.deepEqual(withWorkspace.ctx.visible(), ['other_tool'], 'other sessions are untouched')
 
-const closedAgain = await toggle({ session: 'no-workspace', open: false })
-assert.equal((await closedAgain.json()).open, false)
+const off = await toggle({ session: 'no-workspace', open: false })
+assert.equal((await off.json()).open, false)
 assert.deepEqual(noWorkspace.ctx.visible(), ['other_tool'])
 assert.equal(readState().default, false)
-
-// An explicit request to remember cannot succeed without a workspace.
-const cannotRemember = await toggle({ session: 'no-workspace', open: true, remember: true })
-assert.equal(cannotRemember.status, 400)
-assert.match((await cannotRemember.json()).message, /no workspace directory/)
-assert.deepEqual(noWorkspace.ctx.visible(), ['other_tool'])
-assert.equal(readState().default, false)
-
-// `remember: true` with a workspace saves the workspace rule and applies it.
-const saved = await toggle({ session: 'with-workspace', open: true, remember: true })
-assert.equal(saved.status, 200)
-const savedBody = await saved.json()
-assert.equal(savedBody.remembered, true)
-assert.equal(readState().workspaces['/projects/workspace'], true)
-assert.deepEqual(withWorkspace.ctx.visible(), toolNames)
-
-// A temporary close leaves the saved workspace rule untouched.
-const temporaryClose = await toggle({ session: 'with-workspace', open: false, remember: false })
-assert.equal(temporaryClose.status, 200)
-assert.equal((await temporaryClose.json()).remembered, false)
-assert.equal(readState().workspaces['/projects/workspace'], true)
-assert.deepEqual(withWorkspace.ctx.visible(), ['other_tool'])
 
 // A session that predates a plugin reload is resolved from the host agent table.
 const preReload = makeAgent('pre-reload', '/projects/pre-reload')
@@ -123,20 +101,28 @@ assert.equal(preState.workspace, '/projects/pre-reload')
 assert.equal(preState.open, false)
 const preToggle = await toggle({ session: 'pre-reload', open: true })
 assert.equal(preToggle.status, 200)
-assert.equal((await preToggle.json()).remembered, true)
-assert.equal(readState().workspaces['/projects/pre-reload'], true)
 assert.deepEqual(preReload.ctx.visible(), toolNames)
+assert.equal(readState().default, false)
 
-// The bare global control still changes the default.
+// The bare control sets the default that new sessions start from; running ones keep theirs.
 const global = await toggle({ open: true })
 assert.equal(global.status, 200)
 assert.equal((await global.json()).default, true)
 assert.equal(readState().default, true)
+assert.deepEqual(noWorkspace.ctx.visible(), ['other_tool'])
+assert.deepEqual(createAgent('after-default', '/projects/anywhere').ctx.visible(), toolNames)
+await toggle({ open: false })
+assert.deepEqual(createAgent('after-default-off').ctx.visible(), ['other_tool'])
 
-// Malformed or unauthenticated temporary requests stay rejected.
-const invalidRemember = await toggle({ session: 'with-workspace', open: true, remember: 'yes' })
-assert.equal(invalidRemember.status, 400)
-const globalTemporary = await toggle({ open: true, remember: false })
-assert.equal(globalTemporary.status, 400)
+// Per-workspace rules no longer exist: such requests are refused and nothing is written.
+for (const stale of [{ workspace: '/projects/workspace', open: true }, { session: 'no-workspace', open: true, remember: true }]) {
+  assert.equal((await toggle(stale)).status, 400, JSON.stringify(stale))
+}
+assert.equal(readState().default, false, 'a stale request must not change the default')
+assert.equal(readState().workspaces, undefined)
+assert.equal((await toggle({ action: 'reset-workspace', workspace: '/projects/workspace' })).status, 400)
+
+const malformed = await toggle({ session: 'with-workspace' })
+assert.equal(malformed.status, 400)
 const unknownSession = await toggle({ session: 'missing', open: true })
 assert.equal(unknownSession.status, 404)

@@ -1,6 +1,6 @@
 # REA 管理
 
-在侧栏打开 **REA**，或在 **插件 → REA 管理** 中操作。REA 在宿主中共享一个 MCP 服务。门控按会话决定工具是否进入模型上下文，未单独设置的工作区默认关闭。
+在侧栏打开 **REA**，或在 **插件 → REA 管理** 中操作。REA 在宿主中共享一个 MCP 服务。门控按会话决定工具是否进入模型上下文，新会话默认关闭。
 
 ## 安装与更新
 
@@ -17,17 +17,16 @@
 
 维护命令完成后面板会回读本机状态，并在 **运行状态与更新** 中汇总当前版本、DSH 注册状态与宿主已加载的 MCP 工具数量。若磁盘注册和工具加载不同步，可先点击 **重新检测**；差异仍在时，重新打开 DSH 以重建 MCP 连接。
 
-## 工作区与会话
+## 会话开关
 
-- **会话与工作区设置**支持配置新会话默认值，同时列出已记录独立偏好的工作区，可直接切换开关或点击 **重置** 恢复继承全局默认。全局默认只影响之后新建的会话，不会改动正在运行的对话；工作区规则的修改会立即作用到该目录下所有运行中的会话。目录已被删除的规则会标记为 **目录不存在**，可直接重置。
-- **工作区按真实目录记忆**：符号链接会被解析，git worktree 与其主仓库共用一条规则，子目录里的会话继承最近的上级规则，并且在这样的会话里切换胶囊会更新那条上级规则。
-- **会话顶部的 REA 胶囊**即时应用，并保存该工作区的规则。助手通过 `rea_gate` 的 `on` / `off` 切换时默认只影响当前会话，需要同时保存工作区规则时设置 `remember: true`。助手只能使用 `status`、`on`、`off`，安装、更新、卸载只能在本面板操作。
+- **新会话默认设置**只有一个开关，决定之后新建的会话是否启用 REA，不会改动正在运行的对话。不再有按工作区的单独规则；旧版本保存的规则会被忽略。
+- **输入框左下角的 REA 下拉**（位于权限选择右侧）即时应用，只影响当前会话，不保存任何规则；未安装时置灰，安装在面板里完成。助手通过 `rea_gate` 的 `on` / `off` 切换时同样只影响当前会话，不能修改保存的默认值。助手只能使用 `status`、`on`、`off`，安装、更新、卸载只能在本面板操作。
 - 用 `rea_gate status` 确认当前会话可见工具数。门控根据宿主当时已注册的精确工具名设置可见性。
 
 偏好保存在 `$DSH_HOME/rea-gate.json`，例如：
 
 ```json
-{ "default": false, "workspaces": { "/path/to/project": true } }
+{ "default": false }
 ```
 
 ## 分析引擎与依赖
@@ -59,13 +58,11 @@
 
 | 路由 | 请求 | 返回或行为 |
 |---|---|---|
-| `/api/dsh-rea-gate/state` | GET | 注册（含 `healthy` 判定）、版本、默认值、工作区规则（含 `missing`）、`exposed` 和引擎。用 `session=<id>` 查询会话可见数，用 `refresh=1` 重新体检。`checks: "pending"` 表示体检仍在后台运行，面板会自动重读。 |
-| `/api/dsh-rea-gate/toggle` | POST | `{ open }` 设置默认值，`{ workspace, open }` 设置工作区规则，`{ session, open, remember? }` 切换会话。 |
-| `/api/dsh-rea-gate/toggle` | POST | `{ action }` 支持 `install`、`reinstall`、`update`、`uninstall`（可选 `removePackage: true`）、`check-update`、`install-engine`（`engine`）、`set-env`（`values`）与 `reset-workspace`（`workspace`）。 |
+| `/api/dsh-rea-gate/state` | GET | 注册（含 `healthy` 判定）、版本、默认值、`exposed` 和引擎。用 `session=<id>` 查询会话可见数，用 `refresh=1` 重新体检。`checks: "pending"` 表示体检仍在后台运行，面板会自动重读。 |
+| `/api/dsh-rea-gate/toggle` | POST | `{ open }` 设置默认值，`{ session, open }` 只切换该会话。带 `workspace` 或 `remember` 的请求会被拒绝（400）。 |
+| `/api/dsh-rea-gate/toggle` | POST | `{ action }` 支持 `install`、`reinstall`、`update`、`uninstall`（可选 `removePackage: true`）、`check-update`、`install-engine`（`engine`）与 `set-env`（`values`）。 |
 | `/api/dsh-rea-gate/diagnose` | GET | `graph.selfPresent` 表示宿主模块图中是否包含本插件。面板底部的 **高级诊断** 可直接查询。 |
 
-没有工作区目录的会话通过胶囊切换时只对当前会话生效，不会改动全局默认；此时显式传 `remember: true` 会被拒绝，因为无法保存工作区规则。
-
-门控关闭的会话会被定期复查：REA 晚于会话连接、或更新后新增的工具会被补充隐藏。若关闭的会话仍能看到 REA 工具，状态里的 `exposed` 为 true，胶囊显示「REA 关（未生效）」。
+门控关闭的会话会被定期复查：REA 晚于会话连接、或更新后新增的工具会被补充隐藏。若关闭的会话仍能看到 REA 工具，状态里的 `exposed` 为 true，下拉显示「REA 关（未生效）」。
 
 实机挂载通过客户端 `Slots.listSubTree` 确认，查询 `sidebar.panellist` 的 occupants 是否包含 `rea-gate`。若重合成后仍显示旧面板，退出并重新打开 Desktop 以载入新版组件。

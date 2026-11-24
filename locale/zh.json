@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "REA 管理",
-    "description": "安装、更新和检查 REA，按工作区和会话控制工具可见性。",
+    "description": "安装、更新和检查 REA，按会话控制工具可见性。",
     "detail": "docs/DETAIL.md"
   }
 }

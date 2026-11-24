@@ -4,9 +4,9 @@
 
 **简短说明 / Summary**
 
-REA 会向每个 DSH 会话注册约 263 个 `mcp__rea__*` 工具，大多数会话用不到，schema 还会占用上下文。这个插件让 REA 在宿主中只安装一次，按工作区和会话决定工具是否对模型可见，默认关闭；侧栏面板、插件详情页和会话顶部胶囊都能开关，agent 也可以直接调用 `rea_gate` 工具。
+REA 会向每个 DSH 会话注册约 263 个 `mcp__rea__*` 工具，大多数会话用不到，schema 还会占用上下文。这个插件让 REA 在宿主中只安装一次，按会话决定工具是否对模型可见，默认关闭；侧栏面板、插件详情页和输入框左下角的下拉都能开关，agent 也可以直接调用 `rea_gate` 工具。
 
-Keep REA installed once per host and gate its MCP tools per workspace and session instead of uninstalling it.
+Keep REA installed once per host and gate its MCP tools per session instead of uninstalling it.
 
 **补充信息 / Additional details**
 

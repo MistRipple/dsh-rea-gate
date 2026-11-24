@@ -10,10 +10,7 @@ const stateFile = join(stateDirectory, 'rea-gate.json')
 process.env.DSH_HOME = stateDirectory
 process.env.REA_GATE_SKIP_DOCTOR = '1'
 process.on('exit', () => rmSync(stateDirectory, { recursive: true, force: true }))
-writeFileSync(stateFile, JSON.stringify({
-  default: false,
-  workspaces: { '/projects/closed': false, '/projects/open': true },
-}))
+writeFileSync(stateFile, JSON.stringify({ default: false }))
 
 const toolNames = ['mcp__rea__fixture', 'other_tool']
 const routes = new Map()
@@ -75,7 +72,7 @@ const ctx = {
 // The plugin instance starts with agents that already existed before it loaded.
 apply(ctx)
 assert.deepEqual(closed.ctx.visible(), ['other_tool'])
-assert.deepEqual(open.ctx.visible(), toolNames)
+assert.deepEqual(open.ctx.visible(), ['other_tool'], 'with no default, sessions that predate the plugin start closed')
 
 // An agent present in the host table but not announced at creation is resolved lazily.
 const stateResponse = await routes.get('/api/dsh-rea-gate/state').fetch(
@@ -94,14 +91,14 @@ const toggleResponse = await routes.get('/api/dsh-rea-gate/toggle').fetch(
   }),
 )
 assert.equal(toggleResponse.status, 200)
-assert.equal((await toggleResponse.json()).remembered, true)
 assert.deepEqual(fallback.ctx.visible(), toolNames)
-assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).workspaces['/projects/closed'], true)
+assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).default, false, 'a session switch leaves the saved default alone')
+assert.deepEqual(closed.ctx.visible(), ['other_tool'], 'and the other sessions')
 
-// New sessions still go through agent/created.
+// New sessions still go through agent/created and start from the default.
 const fresh = makeAgent('fresh', '/projects/open')
 onAgentCreated({ agent: fresh })
-assert.deepEqual(fresh.ctx.visible(), toolNames)
+assert.deepEqual(fresh.ctx.visible(), ['other_tool'])
 
 // A disposed agent is forgotten: its session stops resolving and the bookkeeping
 // no longer keeps the transcript alive.

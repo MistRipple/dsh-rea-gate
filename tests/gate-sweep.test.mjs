@@ -16,7 +16,7 @@ process.env.DSH_HOME = directory
 process.env.REA_GATE_SKIP_DOCTOR = '1'
 process.env.REA_BIN = fakeRea
 process.on('exit', () => rmSync(directory, { recursive: true, force: true }))
-writeFileSync(stateFile, JSON.stringify({ default: false, workspaces: {} }))
+writeFileSync(stateFile, JSON.stringify({ default: false }))
 
 // The registered tool set changes over time: REA connects late and grows.
 let registered = ['other_tool']
@@ -112,28 +112,24 @@ assert.deepEqual(early.ctx.visible(), registered, 'an open session is never re-c
 
 // 6. The agent tool can read and flip the gate, nothing else.
 assert.deepEqual(tool.parameters.action.enum, ['status', 'on', 'off'])
-assert.equal(typeof tool.parameters.remember, 'object')
+assert.equal(tool.parameters.remember, undefined, 'the agent cannot persist anything')
 for (const action of ['install', 'update', 'uninstall']) {
   const answer = await tool.execute({ action }, { agent: early })
   assert.match(answer, /only status, on and off/)
 }
 assert.ok(!existsSync(marker), 'the agent tool must never run the REA CLI')
 
-// 7. A model-initiated change is session-only unless it asks to remember.
+// 7. A model-initiated change is session-only and never touches the saved file.
 const workspaceless = makeAgent('workspaceless')
 onAgentCreated({ agent: workspaceless })
 assert.match(await tool.execute({ action: 'status' }, { agent: workspaceless }), /hidden in this session/)
 await tool.execute({ action: 'on' }, { agent: workspaceless })
 assert.deepEqual(workspaceless.ctx.visible(), registered)
-assert.match(
-  await tool.execute({ action: 'on', remember: true }, { agent: workspaceless }),
-  /cannot be remembered/,
-)
 const saved = () => JSON.parse(readFileSync(stateFile, 'utf8'))
-// Step 5 went through the panel route, which saves its workspace rule; the tool must add nothing.
-const panelOnly = { '/projects/a': true }
-assert.deepEqual(saved().workspaces, panelOnly, 'the tool wrote nothing to the state file')
+const before = readFileSync(stateFile, 'utf8')
 await tool.execute({ action: 'off' }, { agent: flaky })
-assert.deepEqual(saved().workspaces, panelOnly)
-await tool.execute({ action: 'on', remember: true }, { agent: flaky })
-assert.equal(saved().workspaces['/projects/b'], true)
+await tool.execute({ action: 'on', remember: true }, { agent: flaky }) // an unknown argument is ignored
+assert.deepEqual(flaky.ctx.visible(), registered)
+assert.equal(readFileSync(stateFile, 'utf8'), before, 'the tool wrote nothing to the state file')
+assert.equal(saved().default, false)
+assert.match(await tool.execute({ action: 'status' }, { agent: flaky }), /New sessions start closed/)

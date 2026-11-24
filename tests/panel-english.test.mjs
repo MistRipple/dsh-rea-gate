@@ -92,7 +92,7 @@ await check('main')
 // The session chip in each of its states.
 for (const patch of [{}, { open: false }, { open: false, exposed: true, tools: 3 }, { installed: false, registeredTools: 0 }]) {
   state = { ...baseState(), ...patch }
-  const chip = await check('conversation.session.header.actions', { sessionId: 'sess' })
+  const chip = await check('conversation.input.left', { sessionId: 'sess' })
   assert.ok(findElement(chip, ({ props }) => props?.onClick), 'the chip renders a control')
 }
 

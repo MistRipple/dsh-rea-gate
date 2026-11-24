@@ -2,7 +2,7 @@ window.__ModuleLoader__.load({
   id: 'dsh-rea-gate',
   factory(require) {
     const React = require('react')
-    const { Button, IconRefreshOutlineRegular, Pill, StateDot, Switch, writeClipboard } = require('@deepseek-ai/dsh-client-ui-primitives')
+    const { Button, IconChevronDownOutlineRegular, IconRefreshOutlineRegular, Menu, Pill, StateDot, Switch, writeClipboard } = require('@deepseek-ai/dsh-client-ui-primitives')
     const h = React.createElement
 
     // The panel follows the browser language: Chinese for zh-*, English otherwise.
@@ -31,8 +31,6 @@ window.__ModuleLoader__.load({
       '正在保存…': 'Saving…',
       '无法保存会话默认设置，请重试。': 'Could not save the session default. Please try again.',
       '已保存': 'Saved',
-      '正在更新工作区规则…': 'Updating the workspace rule…',
-      '无法保存工作区规则，请重试。': 'Could not save the workspace rule. Please try again.',
       '正在通过 Homebrew 安装（可能需要几分钟）…': 'Installing with Homebrew (this can take a few minutes)…',
       '安装完成并已自动检测本机环境': 'Installed. The local environment was detected automatically.',
       '安装失败，请查看输出或点击官方链接手动下载。': 'Installation failed. Check the output or download it manually from the official link.',
@@ -106,8 +104,8 @@ window.__ModuleLoader__.load({
       'REA 为 DSH 及其他客户端创建的注册和技能文件，以及本机全局 rea-agents 命令行包': 'The registrations and skill files REA created for DSH and other clients, plus the global rea-agents command-line package',
       'REA 为 DSH 及其他客户端创建的注册和技能文件': 'The registrations and skill files REA created for DSH and other clients',
       '将保留': 'Will keep',
-      '工作区门控偏好与本地分析引擎': 'Workspace gate preferences and local analysis engines',
-      'REA 命令行软件包、工作区门控偏好与本地分析引擎': 'The REA command-line package, workspace gate preferences and local analysis engines',
+      '门控偏好与本地分析引擎': 'Gate preferences and local analysis engines',
+      'REA 命令行软件包、门控偏好与本地分析引擎': 'The REA command-line package, gate preferences and local analysis engines',
       '同时卸载本机 rea-agents 命令行包（npm uninstall -g rea-agents）': 'Also remove the rea-agents command-line package (npm uninstall -g rea-agents)',
       '取消': 'Cancel',
       '彻底卸载': 'Remove completely',
@@ -132,20 +130,11 @@ window.__ModuleLoader__.load({
       'DSH 集成维护': 'DSH integration maintenance',
       '重新注册': 'Re-register',
       '卸载集成': 'Remove integration',
-      '会话与工作区设置': 'Sessions and workspaces',
+      '新会话默认设置': 'Default for new sessions',
       '新会话默认启用 REA': 'Enable REA in new sessions by default',
-      '未单独配置的工作区将继承此设置，仅对之后新建的会话生效；正在运行的会话可通过顶部 REA 胶囊切换。': 'Workspaces without their own rule inherit this setting. It applies only to sessions created afterwards; change a running one with the REA chip in its header.',
-      '工作区独立规则': 'Workspace rules',
-      '{} 个已记忆': '{} remembered',
-      '暂无工作区独立规则。在任意会话顶部切换 REA 开关时，会自动记住该工作区的偏好。': 'No workspace rules yet. Switching the REA toggle in a session header remembers the choice for that workspace.',
-      '该目录已不存在，可以重置此规则': 'This directory no longer exists. You can reset this rule.',
-      '目录不存在': 'Directory missing',
+      '仅对之后新建的会话生效；正在运行的会话可通过输入框左下角的 REA 下拉单独切换。': 'It applies only to sessions created afterwards; switch a running one with the REA dropdown at the lower left of its input box.',
       '已启用': 'Enabled',
       '已关闭': 'Disabled',
-      '工作区 {} 启用 REA': 'Enable REA in workspace {}',
-      '移除独立规则，恢复继承全局默认': 'Remove the rule and inherit the global default again',
-      '重置工作区 {}': 'Reset workspace {}',
-      '重置': 'Reset',
       '可用': 'Available',
       '需检查': 'Needs attention',
       '已配置，待验证': 'Configured, not verified',
@@ -192,7 +181,7 @@ window.__ModuleLoader__.load({
       '开启 REA 后可直接发给助手的逆向分析提示词模板': 'Prompt templates you can send to the assistant once REA is enabled',
       'REA 文档': 'REA docs',
       '复制示例：{}': 'Copy example: {}',
-      '助手调用 rea_gate 的 on / off 默认只对本次会话生效；需要同时保存到工作区时，将 remember 设为 true。': 'rea_gate on / off called by the assistant applies to this session only by default. Set remember to true to also save it for the workspace.',
+      '助手调用 rea_gate 的 on / off 只对本次会话生效，不会改动新会话的默认设置。': 'rea_gate on / off called by the assistant applies to this session only and never changes the default for new sessions.',
       '高级诊断': 'Advanced diagnostics',
       '查看 DSH 配置文件路径与宿主客户端模块图状态': 'View the DSH config file path and the host client module graph status',
       'DSH 注册配置路径': 'DSH registration config path',
@@ -208,7 +197,7 @@ window.__ModuleLoader__.load({
       '正在读取本机状态…': 'Reading the local state…',
       '重试': 'Retry',
       'REA 管理': 'REA management',
-      '管理本机 REA 集成、工作区门控偏好与可选分析引擎': 'Manage the local REA integration, workspace gate preferences and optional analysis engines',
+      '管理本机 REA 集成、新会话默认设置与可选分析引擎': 'Manage the local REA integration, the default for new sessions and optional analysis engines',
       '无法切换 REA': 'Could not switch REA',
       '门控已关闭，但本会话仍可见 {} 个 REA 工具': 'The gate is closed, but this session can still see {} REA tools',
       '本会话可见 {} 个 REA 工具': 'This session can see {} REA tools',
@@ -216,6 +205,9 @@ window.__ModuleLoader__.load({
       'REA 关（未生效）': 'REA off (not effective)',
       'REA 关': 'REA off',
       'REA 未安装': 'REA not installed',
+      'REA 未安装，请在侧栏的 REA 面板中安装': 'REA is not installed; install it from the REA panel in the sidebar',
+      '开启 REA': 'Turn REA on',
+      '关闭 REA': 'Turn REA off',
     }
 
     const t = (chinese) => (LOCALE === 'zh' ? chinese : EN[chinese] ?? chinese)
@@ -232,6 +224,31 @@ window.__ModuleLoader__.load({
     const FOLLOW_UP_MS = 2_000
     const MAX_FOLLOW_UPS = 20
     // The chip re-reads this often while its page is visible.
+    // Matches the shipped permission trigger next to it in the composer tool row.
+    const COMPOSER_CSS = `
+.rea-composer-gate { display: inline-flex; min-width: 0; }
+.rea-composer-trigger {
+  display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 220px; height: 28px;
+  padding: 0 4px 0 12px; border: none; border-radius: var(--dsw-radius-sm); outline: none;
+  background: transparent; color: var(--dsw-alias-label-secondary);
+  font-size: 13px; line-height: 20px; font-weight: 500; cursor: pointer;
+}
+@media (hover: hover) {
+  .rea-composer-trigger:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+}
+.rea-composer-trigger:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+.rea-composer-trigger:disabled { color: var(--dsw-alias-label-dimmed); cursor: default; }
+.rea-composer-icon { display: inline-flex; flex: 0 0 auto; }
+.rea-composer-icon svg { width: 16px; height: 16px; }
+.rea-composer-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rea-composer-chevron {
+  display: inline-flex; flex: 0 0 auto; color: var(--dsw-alias-label-caption); transition: transform 120ms ease;
+}
+.rea-composer-chevron-open { transform: rotate(180deg); }
+@container (max-width: 460px) { .rea-composer-icon ~ .rea-composer-label { display: none; } }
+`
     const CHIP_POLL_MS = 5_000
 
     const CSS = `
@@ -411,30 +428,6 @@ window.__ModuleLoader__.load({
         color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
         font-variant-numeric: tabular-nums;
       }
-
-      /* Workspaces */
-      .rea-gate .rea-ws-item {
-        display: flex; align-items: center; justify-content: space-between;
-        gap: 10px 14px; padding: 10px 16px;
-      }
-      .rea-gate .rea-ws-item + .rea-ws-item { border-top: 0.5px solid var(--dsw-alias-border-l2); }
-      .rea-gate .rea-ws-main { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 200px; }
-      .rea-gate .rea-ws-icon {
-        display: grid; place-items: center; flex: none;
-        width: 28px; height: 28px; border-radius: var(--dsw-radius-sm, 8px);
-        background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
-        color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
-      }
-      .rea-gate .rea-ws-text { min-width: 0; flex: 1; }
-      .rea-gate .rea-ws-name { font-size: 13px; font-weight: 500; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .rea-gate .rea-ws-path {
-        display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 11.5px; line-height: 17px;
-        color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      }
-      .rea-gate .rea-ws-controls { display: flex; align-items: center; gap: 8px; flex: none; }
-      .rea-gate .rea-ws-empty { padding: 12px 16px; }
 
       /* Engine Accordion List */
       .rea-gate .rea-engine-item { min-width: 0; }
@@ -730,7 +723,6 @@ window.__ModuleLoader__.load({
       'uninstall-full': { pending: t('正在卸载 REA 集成与命令行包…'), success: t('REA 集成与命令行包已彻底卸载') },
       repair: { pending: t('正在重新注册 REA…'), success: t('REA 注册修复步骤已完成') },
       preference: { pending: t('正在保存…'), failure: t('无法保存会话默认设置，请重试。'), success: t('已保存') },
-      workspace: { pending: t('正在更新工作区规则…'), failure: t('无法保存工作区规则，请重试。') },
       'install-engine': { pending: t('正在通过 Homebrew 安装（可能需要几分钟）…'), success: t('安装完成并已自动检测本机环境'), failure: t('安装失败，请查看输出或点击官方链接手动下载。') },
       'set-env': { pending: t('正在保存路径并重新检测…'), success: t('路径配置已保存并重新检测'), failure: t('无法保存路径配置，请重试。') },
     }
@@ -959,15 +951,6 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function FolderIcon() {
-      return h('svg', { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
-        h('path', {
-          d: 'M2 4.5C2 3.67 2.67 3 3.5 3H6.2L7.5 4.5H12.5C13.33 4.5 14 5.17 14 6V11.5C14 12.33 13.33 13 12.5 13H3.5C2.67 13 2 12.33 2 11.5V4.5Z',
-          stroke: 'currentColor', strokeWidth: 1.3, strokeLinejoin: 'round',
-        }),
-      )
-    }
-
     function Section({ title, meta, actions, children }) {
       return h('section', null,
         h('div', { className: 'rea-heading' },
@@ -1096,8 +1079,8 @@ window.__ModuleLoader__.load({
             h('li', null,
               h('span', { className: 'rea-impact-tag rea-impact-keep' }, t('将保留')),
               h('span', null, removePackage
-                ? t('工作区门控偏好与本地分析引擎')
-                : t('REA 命令行软件包、工作区门控偏好与本地分析引擎')),
+                ? t('门控偏好与本地分析引擎')
+                : t('REA 命令行软件包、门控偏好与本地分析引擎')),
             ),
           ),
           h('label', { className: 'rea-checkbox-row' },
@@ -1153,7 +1136,7 @@ window.__ModuleLoader__.load({
           : null
 
       const canMaintain = state.installed && !['missing', 'unavailable'].includes(state.cli)
-      const isLifecycleOp = (op) => Boolean(op && !['load', 'preference', 'workspace'].includes(op) && !op.startsWith('engine-'))
+      const isLifecycleOp = (op) => Boolean(op && !['load', 'preference'].includes(op) && !op.startsWith('engine-'))
       const localFeedback = isLifecycleOp(feedback?.operation) ? feedback : null
       const primary = versionAction(state, updateLookup.latest, Boolean(updateLookup.error))
       const lifecyclePending = isLifecycleOp(pending)
@@ -1229,25 +1212,16 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function splitWorkspacePath(fullPath) {
-      const normalized = String(fullPath || '').replace(/[\\/]+$/, '')
-      if (!normalized) return { name: fullPath || '/', path: fullPath || '/' }
-      const parts = normalized.split(/[\\/]/)
-      return { name: parts[parts.length - 1] || normalized, path: fullPath }
-    }
-
     function SessionDefaults({ state, pending, feedback, run }) {
       const savingDefault = pending === 'preference'
       const defaultFeedback = feedback?.operation === 'preference' ? feedback : null
-      const workspaceFeedback = feedback?.operation === 'workspace' ? feedback : null
-      const workspaces = state.workspaces ?? []
 
-      return h(Section, { title: t('会话与工作区设置') },
+      return h(Section, { title: t('新会话默认设置') },
         h('div', { className: 'rea-group' },
           h('div', { className: 'rea-row rea-setting-row' },
             h('div', { className: 'rea-setting-info' },
               h('div', { className: 'rea-label' }, t('新会话默认启用 REA')),
-              h('p', { className: 'rea-muted' }, t('未单独配置的工作区将继承此设置，仅对之后新建的会话生效；正在运行的会话可通过顶部 REA 胶囊切换。')),
+              h('p', { className: 'rea-muted' }, t('仅对之后新建的会话生效；正在运行的会话可通过输入框左下角的 REA 下拉单独切换。')),
               defaultFeedback?.error && h('p', { className: 'rea-muted rea-error', role: 'alert' }, defaultFeedback.title),
             ),
             h('div', { className: 'rea-actions rea-setting-actions' },
@@ -1262,49 +1236,6 @@ window.__ModuleLoader__.load({
               }),
             ),
           ),
-          h('div', { className: 'rea-subhead rea-divider' },
-            h('span', null, t('工作区独立规则')),
-            workspaces.length > 0 && h('span', null, tt`${workspaces.length} 个已记忆`),
-          ),
-          workspaceFeedback?.error && h('div', { className: 'rea-content rea-divider' },
-            h('p', { className: 'rea-muted rea-error', role: 'alert' }, workspaceFeedback.title),
-          ),
-          workspaces.length === 0
-            ? h('div', { className: 'rea-ws-empty rea-muted' },
-              t('暂无工作区独立规则。在任意会话顶部切换 REA 开关时，会自动记住该工作区的偏好。'),
-            )
-            : h('ul', { className: 'rea-list', 'aria-label': t('工作区独立规则') },
-              workspaces.map(({ path, open, missing }) => {
-                const { name } = splitWorkspacePath(path)
-                return h('li', { key: path, className: 'rea-ws-item' },
-                  h('div', { className: 'rea-ws-main' },
-                    h('span', { className: 'rea-ws-icon' }, h(FolderIcon)),
-                    h('div', { className: 'rea-ws-text' },
-                      h('div', { className: 'rea-ws-name', title: path }, name),
-                      h('span', { className: 'rea-ws-path', dir: 'ltr', title: path }, path),
-                    ),
-                  ),
-                  h('div', { className: 'rea-ws-controls' },
-                    missing && h('span', { className: 'rea-badge', 'data-tone': 'attention', title: t('该目录已不存在，可以重置此规则') }, t('目录不存在')),
-                    h('span', { className: 'rea-badge', 'data-tone': open ? 'ready' : 'idle' }, open ? t('已启用') : t('已关闭')),
-                    h(Switch, {
-                      checked: open,
-                      label: tt`工作区 ${path} 启用 REA`,
-                      disabled: Boolean(pending),
-                      onChange: (nextOpen) => run({ workspace: path, open: nextOpen }, 'workspace'),
-                    }),
-                    h(Button, {
-                      variant: 'ghost',
-                      size: 'sm',
-                      disabled: Boolean(pending),
-                      title: t('移除独立规则，恢复继承全局默认'),
-                      'aria-label': tt`重置工作区 ${path}`,
-                      onClick: () => run({ action: 'reset-workspace', workspace: path }, 'workspace'),
-                    }, t('重置')),
-                  ),
-                )
-              }),
-            ),
         ),
       )
     }
@@ -1654,7 +1585,7 @@ window.__ModuleLoader__.load({
               ),
               h(CopyButton, { text: prompt, ariaLabel: tt`复制示例：${prompt}` }),
             )),
-            h('p', { className: 'rea-muted' }, t('助手调用 rea_gate 的 on / off 默认只对本次会话生效；需要同时保存到工作区时，将 remember 设为 true。')),
+            h('p', { className: 'rea-muted' }, t('助手调用 rea_gate 的 on / off 只对本次会话生效，不会改动新会话的默认设置。')),
           ),
         ),
       )
@@ -1744,7 +1675,7 @@ window.__ModuleLoader__.load({
             h('div', { className: 'rea-logo' }, h(ReaIcon, { size: 18 })),
             h('div', null,
               h('h1', null, t('REA 管理')),
-              h('p', { className: 'rea-muted rea-page-sub' }, t('管理本机 REA 集成、工作区门控偏好与可选分析引擎')),
+              h('p', { className: 'rea-muted rea-page-sub' }, t('管理本机 REA 集成、新会话默认设置与可选分析引擎')),
             ),
           ),
           h(GateControls),
@@ -1766,6 +1697,7 @@ window.__ModuleLoader__.load({
       const [state, setState] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
       const [message, setMessage] = React.useState('')
+      const [menuOpen, setMenuOpen] = React.useState(false)
 
       React.useEffect(() => {
         let current = true
@@ -1813,28 +1745,71 @@ window.__ModuleLoader__.load({
       const installed = state.installed !== false
       const open = state.open === true
       const exposed = installed && !open && state.exposed === true
-      const toggle = async () => {
-        if (busy) return
+      const choose = async (id) => {
+        setMenuOpen(false)
+        if (busy || !installed || (id === 'on') === open) return
         setBusy(true)
         setMessage('')
-        const body = installed ? { session: sessionId, open: !open } : { session: sessionId, action: 'install' }
-        const next = await post(body)
+        const next = await post({ session: sessionId, open: id === 'on' })
         if (typeof next?.installed === 'boolean') setState(next)
         if (!next || next.ok === false) setMessage(next?.message || t('无法切换 REA'))
         setBusy(false)
       }
 
-      return h(Pill, {
-        active: installed && open,
-        onClick: toggle,
-        disabled: busy,
-        title: message
-          || (exposed ? tt`门控已关闭，但本会话仍可见 ${state.tools} 个 REA 工具` : null)
-          || (state.sessionKnown ? tt`本会话可见 ${state.tools} 个 REA 工具` : state.workspace)
-          || 'REA',
-        'aria-pressed': installed ? open : undefined,
-      }, h(StateDot, { state: busy ? 'ongoing' : installed && open ? 'done' : 'idle', size: 8 }),
-      installed ? (open ? t('REA 开') : exposed ? t('REA 关（未生效）') : t('REA 关')) : t('REA 未安装'))
+      const label = installed ? (open ? t('REA 开') : exposed ? t('REA 关（未生效）') : t('REA 关')) : t('REA 未安装')
+      const title = message
+        || (!installed ? t('REA 未安装，请在侧栏的 REA 面板中安装') : null)
+        || (exposed ? tt`门控已关闭，但本会话仍可见 ${state.tools} 个 REA 工具` : null)
+        || (state.sessionKnown ? tt`本会话可见 ${state.tools} 个 REA 工具` : state.workspace)
+        || 'REA'
+      const trigger = h('button', {
+        type: 'button',
+        className: 'rea-composer-trigger',
+        'aria-label': label,
+        'aria-haspopup': 'listbox',
+        'aria-expanded': menuOpen,
+        title,
+        disabled: busy || !installed,
+        onClick: () => setMenuOpen(!menuOpen),
+      },
+      h('span', { className: 'rea-composer-icon', 'aria-hidden': true }, h(ReaIcon, { size: 16 })),
+      h('span', { className: 'rea-composer-label' }, label),
+      IconChevronDownOutlineRegular
+        ? h('span', { className: 'rea-composer-chevron' + (menuOpen ? ' rea-composer-chevron-open' : ''), 'aria-hidden': true },
+          h(IconChevronDownOutlineRegular, null))
+        : null)
+
+      // A host without the shared Menu primitive still gets a working control.
+      if (!Menu) {
+        return h('span', { className: 'rea-composer-gate' },
+          h('style', null, COMPOSER_CSS),
+          h('select', {
+            className: 'rea-composer-trigger',
+            'aria-label': label,
+            title,
+            value: open ? 'on' : 'off',
+            disabled: busy || !installed,
+            onChange: (event) => { void choose(event.target.value) },
+          },
+          h('option', { value: 'on' }, t('开启 REA')),
+          h('option', { value: 'off' }, t('关闭 REA'))))
+      }
+
+      return h('span', { className: 'rea-composer-gate' },
+        h('style', null, COMPOSER_CSS),
+        h(Menu, {
+          open: menuOpen,
+          items: [
+            { id: 'on', label: t('开启 REA') },
+            { id: 'off', label: t('关闭 REA') },
+          ],
+          selectedId: open ? 'on' : 'off',
+          onSelect: choose,
+          onClose: () => setMenuOpen(false),
+          side: 'top',
+          portal: true,
+          anchor: trigger,
+        }))
     }
 
     function ReaIcon(props) {
@@ -1842,9 +1817,8 @@ window.__ModuleLoader__.load({
       return h(
         'svg',
         { width: size, height: size, viewBox: '0 0 24 24', 'aria-hidden': true, fill: 'none' },
-        h('rect', { x: 3.5, y: 4.5, width: 3, height: 15, rx: 1.5, fill: 'currentColor', opacity: 0.5 }),
-        h('rect', { x: 8.5, y: 4.5, width: 3, height: 15, rx: 1.5, fill: 'currentColor', opacity: 0.75 }),
-        h('circle', { cx: 17, cy: 12, r: 4, fill: 'currentColor' }),
+        h('path', { d: 'M3.5 21V3h10c4.4 0 7 2.5 7 6.1s-2.6 6.1-7 6.1H9l3.4-3.5h1.1c1.9 0 3-.9 3-2.6s-1.1-2.6-3-2.6h-6V21Z', fill: 'currentColor' }),
+        h('path', { d: 'M11.6 16.6h4.9l4.1 4.4h-5Z', fill: 'currentColor' }),
       )
     }
 
@@ -1863,12 +1837,18 @@ window.__ModuleLoader__.load({
         ctx.slots.inject('plugins.bundle.config', () =>
           ctx.slots.register({ name: 'plugins.bundle.config', key: 'dsh-rea-gate' }, ReaPluginConfig),
         )
-        // `conversation.header` is a single slot with no registration options: writing
-        // there replaces the shipped navigation container. The chip belongs to the
-        // session-scoped action list, which also supplies the `sessionId` prop.
-        ctx.slots.inject('conversation.session.header.actions', () =>
+        // The switch sits in the composer tool row, right after the permission
+        // control. `conversation.input.left` is a session-scoped list slot; its
+        // registration's `inject` is how the session id reaches the component.
+        ctx.slots.inject('conversation.input.left', () =>
           ctx.slots.register(
-            { name: 'conversation.session.header.actions', id: PANEL_ID, order: 40, label: () => 'REA' },
+            {
+              name: 'conversation.input.left',
+              id: PANEL_ID,
+              order: 0,
+              label: () => 'REA',
+              inject: (sessionId) => ({ sessionId }),
+            },
             ReaChip,
           ),
         )

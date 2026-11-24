@@ -51,6 +51,12 @@ export function mountClient({ locale = 'zh-CN' } = {}) {
       onClick: () => onChange(!checked),
     }),
     StateDot: () => h('span'),
+    IconChevronDownOutlineRegular: () => h('span'),
+    // Stand-in for the host Menu: the anchor, plus the items once it is open.
+    Menu: ({ open, items, selectedId, onSelect, anchor }) => h('span', null, anchor,
+      open ? h('span', { role: 'listbox' }, items.map((item) => h('button', {
+        key: item.id, role: 'option', 'aria-selected': item.id === selectedId, onClick: () => onSelect(item.id),
+      }, item.label))) : null),
     IconRefreshOutlineRegular: () => h('span'),
   }
 

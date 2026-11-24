@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -11,26 +11,23 @@ process.env.HOME = home
 process.env.USERPROFILE = home
 delete process.env.REA_BIN
 
-const { canonicalWorkspace, isInside, ruleFor, isOpen } = await import('../lib/state.js')
+const { isOpen, readState, writeState } = await import('../lib/state.js')
 const { normalizeEnvValue } = await import('../lib/engines.js')
 const { findBinary, runCommand, HEALTHY_REGISTRATION, parseJsonOutput } = await import('../lib/rea-cli.js')
 const tr = (_chinese, english) => english
 
-// Workspace keys: trailing separators and relative paths are normalised lexically.
-assert.equal(canonicalWorkspace(`${root}/`), root)
-assert.equal(canonicalWorkspace(join(root, 'a', '..')), root)
-assert.equal(canonicalWorkspace(''), null)
-assert.equal(canonicalWorkspace(42), null)
-assert.equal(canonicalWorkspace(join(root, 'not-created-yet')), join(root, 'not-created-yet'))
-assert.ok(isInside(join(root, 'a', 'b'), root))
-assert.ok(!isInside(`${root}-other`, root), 'a sibling that shares a prefix is not inside')
-
-// A rule is found on the directory itself or the nearest parent that has one.
-const state = { default: true, workspaces: { [join(root, 'p')]: false } }
-assert.equal(ruleFor(state, join(root, 'p', 'deep', 'er'))?.path, join(root, 'p'))
-assert.equal(isOpen(state, join(root, 'p', 'deep')), false)
-assert.equal(isOpen(state, join(root, 'q')), true, 'no rule: the default decides')
-assert.equal(isOpen(state, null), true)
+// The saved policy is one default plus the engine env; old per-workspace rules are dropped.
+assert.equal(isOpen({ default: true }), true)
+assert.equal(isOpen({ default: false }), false)
+process.env.DSH_HOME = join(root, 'dsh')
+mkdirSync(process.env.DSH_HOME)
+writeFileSync(join(process.env.DSH_HOME, 'rea-gate.json'), JSON.stringify({ default: true, workspaces: { '/old': true } }))
+const loaded = readState()
+assert.equal(loaded.default, true)
+assert.deepEqual(Object.keys(loaded), ['default', 'env'], 'no workspaces key is kept')
+assert.deepEqual(Object.keys(loaded.env), [])
+assert.ok(writeState(readState()))
+assert.deepEqual(JSON.parse(readFileSync(join(process.env.DSH_HOME, 'rea-gate.json'), 'utf8')), { default: true })
 
 // Engine settings: `~` expands, relative and wrong-kind paths are refused, empty clears.
 const tool = join(home, 'bin', 'apktool')

@@ -16,7 +16,7 @@ process.env.REA_IDA_MCP_CONFIG = '/test-config/ida.json'
 delete process.env.GHIDRA_INSTALL_DIR
 delete process.env.JAVA_HOME
 process.on('exit', () => rmSync(stateDirectory, { recursive: true, force: true }))
-writeFileSync(stateFile, JSON.stringify({ default: false, workspaces: { [openWorkspace]: true, [closedWorkspace]: false } }))
+writeFileSync(stateFile, JSON.stringify({ default: false }))
 
 const routes = new Map()
 const toolNames = ['mcp__rea__fixture', 'other_tool']
@@ -69,11 +69,20 @@ const createAgent = (id, cwd) => {
 }
 const closedAgent = createAgent('closed', closedWorkspace)
 const active = createAgent('active', openWorkspace)
+await gateTool.execute({ action: 'on' }, { agent: active }) // this session switched itself on
 assert.deepEqual(closedAgent.ctx.visibleTools, ['other_tool'])
 assert.equal(gateTool.name, 'rea_gate')
 const status = await gateTool.execute({ action: 'status' }, { agent: closedAgent })
 assert.match(status, /hidden in this session/)
 assert.match(status, /REA tools visible in this session: 0\./)
+
+// The model can read and toggle the gate for its own session, nothing else.
+// Install, update and uninstall exist only on the panel route.
+assert.deepEqual(gateTool.parameters.action.enum, ['status', 'on', 'off'])
+for (const action of ['install', 'update', 'reinstall', 'uninstall', 'install-engine', 'set-env']) {
+  const refused = await gateTool.execute({ action, removePackage: true }, { agent: closedAgent })
+  assert.match(refused, /only status, on and off are available to the agent/, action)
+}
 
 const requests = []
 const posts = []
@@ -100,12 +109,10 @@ assert.equal(await render(configSlot, { view: 'summary' }), null)
 const renderConfig = () => render(configSlot, { view: 'page' })
 const tree = await renderConfig()
 assert.equal(findButton(tree, '新会话默认启用 REA').props['aria-checked'], false)
-// Remembered workspaces are shown in Session Settings with individual switches and reset buttons.
-assert.ok(text(tree).includes(openWorkspace))
-assert.ok(text(tree).includes(closedWorkspace))
-assert.equal(findButton(tree, `工作区 ${openWorkspace} 启用 REA`).props['aria-checked'], true)
-assert.equal(findButton(tree, `工作区 ${closedWorkspace} 启用 REA`).props['aria-checked'], false)
-assert.ok(findButton(tree, `重置工作区 ${openWorkspace}`))
+// One global default: there is no per-workspace list any more.
+assert.match(text(tree), /新会话默认设置/)
+assert.ok(!text(tree).includes('工作区'), 'the panel offers no workspace rules')
+assert.ok(!text(tree).includes(openWorkspace))
 assert.ok(findButton(tree, '检查更新'))
 assert.equal(findButton(tree, '更新 REA'), undefined)
 assert.equal(findElement(tree, ({ type, props }) => type === 'details' || type === 'dialog' || props.popover), undefined)
@@ -164,48 +171,26 @@ const withUsage = await renderConfig()
 assert.match(text(withUsage), /REA 会话示例 .*Electron .*\.NET/)
 assert.ok(findButton(withUsage, '复制示例：'))
 
-// Toggle workspace directly from the Session Settings UI.
-await findButton(await renderConfig(), `工作区 ${openWorkspace} 启用 REA`).props.onClick()
-assert.deepEqual(posts, [{ workspace: openWorkspace, open: false }])
-assert.equal(findButton(await renderConfig(), `工作区 ${openWorkspace} 启用 REA`).props['aria-checked'], false)
-assert.deepEqual(JSON.parse(readFileSync(stateFile, 'utf8')), {
-  default: false,
-  workspaces: { [openWorkspace]: false, [closedWorkspace]: false },
-})
-// A workspace rule changed from the panel reaches the sessions already running there.
-assert.deepEqual(active.ctx.visibleTools, ['other_tool'])
-assert.deepEqual(createAgent('new', openWorkspace).ctx.visibleTools, ['other_tool'])
-
 const session = await (await fetch('api/dsh-rea-gate/state?session=active')).json()
-assert.equal(session.open, false)
-assert.equal(session.tools, 0)
+assert.equal(session.open, true, 'the running session keeps its own switch')
+assert.equal(session.tools, 1)
 const closed = await (await fetch('api/dsh-rea-gate/state?session=closed')).json()
 assert.equal(closed.installed, true)
 assert.equal(closed.registeredTools, 1)
 assert.equal(closed.tools, 0)
 
-// A model-initiated change is session-only: it must not rewrite the saved rule.
-const savedBefore = JSON.parse(readFileSync(stateFile, 'utf8')).workspaces[closedWorkspace]
+// A model-initiated change is session-only: it never rewrites the saved file.
+const savedBefore = readFileSync(stateFile, 'utf8')
 await gateTool.execute({ action: 'on' }, { agent: closedAgent })
 assert.deepEqual(closedAgent.ctx.visibleTools, toolNames)
-assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).workspaces[closedWorkspace], savedBefore)
-await gateTool.execute({ action: 'on', remember: true }, { agent: closedAgent })
-assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).workspaces[closedWorkspace], true)
+assert.equal(readFileSync(stateFile, 'utf8'), savedBefore)
 const sessionToggle = await fetch('api/dsh-rea-gate/toggle', {
   method: 'POST', body: JSON.stringify({ session: 'closed', open: false }),
 })
 assert.equal((await sessionToggle.json()).open, false)
 assert.deepEqual(closedAgent.ctx.visibleTools, ['other_tool'])
-
-const temporary = await fetch('api/dsh-rea-gate/toggle', {
-  method: 'POST', body: JSON.stringify({ session: 'closed', open: true, remember: false }),
-})
-assert.equal((await temporary.json()).remembered, false)
-assert.deepEqual(closedAgent.ctx.visibleTools, toolNames)
-assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).workspaces[closedWorkspace], false)
-assert.deepEqual(createAgent('another', closedWorkspace).ctx.visibleTools, ['other_tool'])
-await gateTool.execute({ action: 'off', remember: false }, { agent: closedAgent })
-assert.deepEqual(closedAgent.ctx.visibleTools, ['other_tool'])
+assert.equal(readFileSync(stateFile, 'utf8'), savedBefore, 'a session switch saves nothing')
+assert.deepEqual(active.ctx.visibleTools, toolNames, 'other sessions keep their own switch')
 
 const beforeRefresh = requests.length
 await findButton(await renderConfig(), '重新检测').props.onClick()
@@ -220,11 +205,9 @@ const failedPreference = await renderConfig()
 assert.equal(findButton(failedPreference, '新会话默认启用 REA').props['aria-checked'], true)
 assert.match(text(failedPreference), /无法保存会话默认设置/)
 rejectPreference = false
-await findButton(await renderConfig(), `重置工作区 ${openWorkspace}`).props.onClick()
-assert.ok(!text(await renderConfig()).includes(openWorkspace))
-assert.deepEqual(createAgent('inherited', openWorkspace).ctx.visibleTools, toolNames)
-await findButton(await renderConfig(), `重置工作区 ${closedWorkspace}`).props.onClick()
-assert.match(text(await renderConfig()), /暂无工作区独立规则/)
+// The default saved above decides the next new session; the running ones keep their switch.
+assert.deepEqual(createAgent('after-default', openWorkspace).ctx.visibleTools, toolNames)
+assert.deepEqual(closedAgent.ctx.visibleTools, ['other_tool'])
 
 const diagnosis = await (await fetch('api/dsh-rea-gate/diagnose')).json()
 assert.deepEqual(diagnosis.graph, { rev: 1, selfPresent: true })

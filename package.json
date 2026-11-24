@@ -1,7 +1,7 @@
 {
   "name": "dsh-rea-gate",
   "version": "0.3.1",
-  "description": "Per-session gate for REA: keep the reverse-engineering toolset installed but expose it only in the sessions and workspaces that ask for it.",
+  "description": "Per-session gate for REA: keep the reverse-engineering toolset installed but expose it only in the sessions that ask for it.",
   "license": "MIT",
   "author": "MistRipple",
   "repository": {
@@ -31,7 +31,8 @@
     ".": "./index.js",
     "./client": "./client.js",
     "./locale/*.json": "./locale/*.json",
-    "./icon": "./icon.svg"
+    "./icon": "./icon.svg",
+    "./icon-monochrome": "./icon-monochrome.svg"
   },
   "files": [
     "index.js",
@@ -41,6 +42,7 @@
     "locale/*.json",
     "docs",
     "icon.svg",
+    "icon-monochrome.svg",
     "README.md",
     "LICENSE"
   ],
