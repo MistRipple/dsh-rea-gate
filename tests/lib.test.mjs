@@ -12,8 +12,8 @@ process.env.USERPROFILE = home
 delete process.env.REA_BIN
 
 const { isOpen, readState, writeState } = await import('../lib/state.js')
-const { normalizeEnvValue } = await import('../lib/engines.js')
-const { findBinary, runCommand, HEALTHY_REGISTRATION, parseJsonOutput } = await import('../lib/rea-cli.js')
+const { normalizeEnvValue, probeJavaHome } = await import('../lib/engines.js')
+const { findBinary, runCommand, installReaPackage, HEALTHY_REGISTRATION, parseJsonOutput } = await import('../lib/rea-cli.js')
 const tr = (_chinese, english) => english
 
 // The saved policy is one default plus the engine env; old per-workspace rules are dropped.
@@ -41,6 +41,30 @@ assert.equal(normalizeEnvValue('JAVA_HOME', tool, tr).ok, false, 'JAVA_HOME must
 assert.equal(normalizeEnvValue('HOPPER_LAUNCHER_PATH', join(home, 'bin'), tr).ok, true, 'Hopper accepts a file or a bundle')
 assert.match(normalizeEnvValue('REA_ADB_PATH', join(root, 'missing'), (zh) => zh).message, /路径不存在/)
 
+// Backslash `~\\` paths (Windows) expand too.
+const backslash = normalizeEnvValue('REA_APKTOOL_COMMAND', '~\\bin\\apktool', tr)
+if (process.platform === 'win32') assert.deepEqual(backslash, { ok: true, value: tool })
+else assert.ok(backslash.message.includes(home), 'the `~` is expanded even where `\\` is not a separator')
+
+// JDK discovery: JAVA_HOME wins, `java.exe` counts, and each platform scans its own folders.
+const jdk = (dir, exe = 'java') => {
+  mkdirSync(join(dir, 'bin'), { recursive: true })
+  writeFileSync(join(dir, 'bin', exe), '')
+  return dir
+}
+const winJdk = jdk(join(root, 'pf', 'Eclipse Adoptium', 'jdk-17.0.9'), 'java.exe')
+const newerWinJdk = jdk(join(root, 'pf', 'Eclipse Adoptium', 'jdk-21.0.1'), 'java.exe')
+const winEnv = { ProgramFiles: join(root, 'pf') }
+assert.deepEqual(probeJavaHome({ JAVA_HOME: winJdk }, null, { platform: 'win32' }), { available: true, home: winJdk, configured: true })
+assert.equal(probeJavaHome(winEnv, null, { platform: 'win32' }).home, newerWinJdk, 'the newest JDK folder is preferred')
+assert.equal(probeJavaHome({ JAVA_HOME: join(root, 'missing'), ...winEnv }, null, { platform: 'win32' }).home, newerWinJdk)
+assert.deepEqual(probeJavaHome({}, null, { platform: 'win32' }), { available: false, home: null, configured: false })
+const brewOpt = join(root, 'brew')
+const brewJdk = jdk(join(brewOpt, 'opt', 'openjdk@21', 'libexec/openjdk.jdk/Contents/Home'))
+jdk(join(brewOpt, 'opt', 'not-a-jdk', 'libexec/openjdk.jdk/Contents/Home'))
+assert.equal(probeJavaHome({}, brewOpt, { platform: 'darwin' }).home, brewJdk)
+assert.equal(probeJavaHome({}, null, { platform: 'linux' }).configured, false)
+
 // Executables are found on PATH, and REA_BIN wins for `rea`.
 const bin = join(root, 'bin')
 mkdirSync(bin)
@@ -66,3 +90,27 @@ assert.deepEqual(parseJsonOutput({ out: '{"a":1}' }), { a: 1 })
 assert.equal(parseJsonOutput({ out: 'not json' }), null)
 assert.equal(parseJsonOutput({ out: '' }), null)
 assert.ok(HEALTHY_REGISTRATION.has('aligned') && !HEALTHY_REGISTRATION.has('missing'))
+
+// A damaged npm cache (the real failure a Windows user hit) is retried once
+// against a throwaway cache; other failures are reported as they are.
+const cacheError = "npm error enoent Invalid response body while trying to fetch https://registry.npmjs.org/rea-agents: ENOENT: no such file or directory, stat C:\\Users\\x\\AppData\\Local\\npm-cache\\_cacache\\content-v2\\sha512\\47"
+const calls = []
+const flaky = async (command, args, timeout, options) => {
+  calls.push({ command, args, cache: options.env.npm_config_cache })
+  return calls.length === 1
+    ? { ok: false, code: 1, out: '', err: cacheError }
+    : { ok: true, code: 0, out: 'added 1 package', err: '' }
+}
+const recovered = await installReaPackage({ PATH: 'x' }, flaky)
+assert.equal(recovered.ok, true)
+assert.equal(calls.length, 2)
+assert.equal(calls[0].cache, undefined, 'the first attempt uses the user cache')
+assert.match(calls[1].cache, /dsh-rea-gate-npm-cache/)
+assert.ok(calls[1].args.includes('--prefer-online'))
+calls.length = 0
+const offline = await installReaPackage({}, async (command, args, timeout, options) => {
+  calls.push(args)
+  return { ok: false, code: 1, out: '', err: 'npm error network request failed' }
+})
+assert.equal(offline.ok, false)
+assert.equal(calls.length, 1, 'a network failure is not retried')

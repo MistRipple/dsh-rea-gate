@@ -2,7 +2,7 @@ window.__ModuleLoader__.load({
   id: 'dsh-rea-gate',
   factory(require) {
     const React = require('react')
-    const { Button, IconChevronDownOutlineRegular, IconRefreshOutlineRegular, Menu, Pill, StateDot, Switch, writeClipboard } = require('@deepseek-ai/dsh-client-ui-primitives')
+    const { Button, IconChevronDownOutlineRegular, IconFolderOpenOutlineRegular, IconRefreshOutlineRegular, Menu, Pill, StateDot, Switch, writeClipboard } = require('@deepseek-ai/dsh-client-ui-primitives')
     const h = React.createElement
 
     // The panel follows the browser language: Chinese for zh-*, English otherwise.
@@ -31,20 +31,19 @@ window.__ModuleLoader__.load({
       '正在保存…': 'Saving…',
       '无法保存会话默认设置，请重试。': 'Could not save the session default. Please try again.',
       '已保存': 'Saved',
-      '正在通过 Homebrew 安装（可能需要几分钟）…': 'Installing with Homebrew (this can take a few minutes)…',
+      '正在安装（可能需要几分钟）…': 'Installing (this can take a few minutes)…',
       '安装完成并已自动检测本机环境': 'Installed. The local environment was detected automatically.',
       '安装失败，请查看输出或点击官方链接手动下载。': 'Installation failed. Check the output or download it manually from the official link.',
       '正在保存路径并重新检测…': 'Saving the path and re-checking…',
       '路径配置已保存并重新检测': 'Path saved and re-checked',
       '无法保存路径配置，请重试。': 'Could not save the path. Please try again.',
-      '例如 /opt/homebrew/opt/ghidra/libexec': 'e.g. /opt/homebrew/opt/ghidra/libexec',
-      '例如 /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home': 'e.g. /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home',
-      '例如 /usr/local/bin/hopper': 'e.g. /usr/local/bin/hopper',
-      '例如 ~/.config/ida/mcp.json': 'e.g. ~/.config/ida/mcp.json',
-      '例如 ~/tools/jadx-headless-mcp-0.7.1-all.jar': 'e.g. ~/tools/jadx-headless-mcp-0.7.1-all.jar',
-      '例如 /opt/homebrew/bin/apktool': 'e.g. /opt/homebrew/bin/apktool',
-      '例如 /opt/homebrew/bin/adb': 'e.g. /opt/homebrew/bin/adb',
-      '例如 /usr/local/bin/kuna': 'e.g. /usr/local/bin/kuna',
+      '例如': 'e.g.',
+      '宿主端还是旧版本，尚不支持选择对话框。请在 插件 → 已安装 中把本插件关闭再开启，或直接填写路径。': 'The host is still running an older version of this plugin and cannot open the chooser. Turn the plugin off and on again under Plugins → Installed, or type the path.',
+      '选择文件夹': 'Choose a folder',
+      '选择文件': 'Choose a file',
+      '选择 {} 路径': 'Choose a path for {}',
+      '无法打开选择对话框，请直接填写路径。': 'Could not open the chooser. Type the path instead.',
+      '未能自动识别时，在上方填写本机的安装路径，保存后会自动重新检测。': 'If it was not detected automatically, enter its install path above; it is re-checked after saving.',
       '原生二进制分析': 'Native binary analysis',
       'Android 逆向': 'Android reverse engineering',
       '共享运行时依赖': 'Shared runtime dependencies',
@@ -155,8 +154,7 @@ window.__ModuleLoader__.load({
       '配置说明': 'Setup',
       '环境变量与路径配置': 'Environment variables and paths',
       '{} 环境变量': '{} environment variables',
-      'Homebrew 安装': 'Homebrew install',
-      '正在执行 {}（可能需要几分钟）…': 'Running {} (this can take a few minutes)…',
+      '正在安装：{}（可能需要几分钟）…': 'Installing: {} (this can take a few minutes)…',
       '本机检测通过，在启用 REA 的会话中可直接调用此引擎。': 'The local check passed. This engine can be used directly in sessions where REA is enabled.',
       '异常诊断（rea doctor）': 'Problem details (rea doctor)',
       '检测详情（rea doctor）': 'Check details (rea doctor)',
@@ -541,6 +539,19 @@ window.__ModuleLoader__.load({
         border-color: var(--dsw-alias-state-business-primary);
       }
       .rea-gate .rea-path-input:disabled { opacity: 0.6; }
+      .rea-gate .rea-path-browse {
+        display: inline-flex; align-items: center; justify-content: center;
+        flex: 0 0 auto; width: 32px; height: 32px; box-sizing: border-box; padding: 0;
+        border: 0.5px solid var(--dsw-alias-border-l4, var(--dsw-alias-border-l2));
+        border-radius: var(--dsw-radius-sm, 8px);
+        background: var(--dsw-alias-bg-layer-3, var(--dsw-alias-bg-base));
+        color: var(--dsw-alias-label-secondary);
+        font-size: 14px; line-height: 1; cursor: pointer;
+      }
+      .rea-gate .rea-path-browse:hover:not(:disabled) { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-state-business-primary); }
+      .rea-gate .rea-path-browse:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 1px; }
+      .rea-gate .rea-path-browse:disabled { opacity: 0.6; cursor: default; }
+      .rea-gate .rea-env-error { flex: 1 1 100%; margin: 0; font-size: 12px; color: var(--dsw-alias-state-danger-primary, #d33); }
       @media (pointer: coarse) {
         .rea-gate .rea-path-input { font-size: 16px; }
       }
@@ -720,7 +731,7 @@ window.__ModuleLoader__.load({
       'uninstall-full': { pending: t('正在卸载 REA 集成与命令行包…'), success: t('REA 集成与命令行包已彻底卸载') },
       repair: { pending: t('正在重新注册 REA…'), success: t('REA 注册修复步骤已完成') },
       preference: { pending: t('正在保存…'), failure: t('无法保存会话默认设置，请重试。'), success: t('已保存') },
-      'install-engine': { pending: t('正在通过 Homebrew 安装（可能需要几分钟）…'), success: t('安装完成并已自动检测本机环境'), failure: t('安装失败，请查看输出或点击官方链接手动下载。') },
+      'install-engine': { pending: t('正在安装（可能需要几分钟）…'), success: t('安装完成并已自动检测本机环境'), failure: t('安装失败，请查看输出或点击官方链接手动下载。') },
       'set-env': { pending: t('正在保存路径并重新检测…'), success: t('路径配置已保存并重新检测'), failure: t('无法保存路径配置，请重试。') },
     }
 
@@ -731,15 +742,49 @@ window.__ModuleLoader__.load({
       return operations[operation] ?? null
     }
 
-    const ENV_PLACEHOLDERS = {
-      GHIDRA_INSTALL_DIR: t('例如 /opt/homebrew/opt/ghidra/libexec'),
-      JAVA_HOME: t('例如 /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home'),
-      HOPPER_LAUNCHER_PATH: t('例如 /usr/local/bin/hopper'),
-      REA_IDA_MCP_CONFIG: t('例如 ~/.config/ida/mcp.json'),
-      REA_JADX_MCP_JAR: t('例如 ~/tools/jadx-headless-mcp-0.7.1-all.jar'),
-      REA_APKTOOL_COMMAND: t('例如 /opt/homebrew/bin/apktool'),
-      REA_ADB_PATH: t('例如 /opt/homebrew/bin/adb'),
-      REA_KUNA_COMMAND: t('例如 /usr/local/bin/kuna'),
+    // Example paths follow the machine the browser runs on, which is the machine
+    // that hosts DSH on Desktop.
+    const PLATFORM = (() => {
+      const hint = String((typeof navigator !== 'undefined' && (navigator.userAgentData?.platform || navigator.platform || navigator.userAgent)) || '')
+      if (/win/i.test(hint) && !/darwin/i.test(hint)) return 'win'
+      if (/mac|iphone|ipad/i.test(hint)) return 'mac'
+      return 'linux'
+    })()
+    const ENV_EXAMPLES = {
+      mac: {
+        GHIDRA_INSTALL_DIR: '/opt/homebrew/opt/ghidra/libexec',
+        JAVA_HOME: '/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home',
+        HOPPER_LAUNCHER_PATH: '/usr/local/bin/hopper',
+        REA_IDA_MCP_CONFIG: '~/.config/ida/mcp.json',
+        REA_JADX_MCP_JAR: '~/tools/jadx-headless-mcp-0.7.1-all.jar',
+        REA_APKTOOL_COMMAND: '/opt/homebrew/bin/apktool',
+        REA_ADB_PATH: '/opt/homebrew/bin/adb',
+        REA_KUNA_COMMAND: '/usr/local/bin/kuna',
+      },
+      linux: {
+        GHIDRA_INSTALL_DIR: '/opt/ghidra',
+        JAVA_HOME: '/usr/lib/jvm/java-21-openjdk-amd64',
+        HOPPER_LAUNCHER_PATH: '/opt/hopper/bin/Hopper',
+        REA_IDA_MCP_CONFIG: '~/.config/ida/mcp.json',
+        REA_JADX_MCP_JAR: '~/tools/jadx-headless-mcp-0.7.1-all.jar',
+        REA_APKTOOL_COMMAND: '/usr/local/bin/apktool',
+        REA_ADB_PATH: '/usr/bin/adb',
+        REA_KUNA_COMMAND: '/usr/local/bin/kuna',
+      },
+      win: {
+        GHIDRA_INSTALL_DIR: 'C:\\tools\\ghidra_11.3_PUBLIC',
+        JAVA_HOME: 'C:\\Program Files\\Eclipse Adoptium\\jdk-21',
+        HOPPER_LAUNCHER_PATH: 'C:\\Program Files\\Hopper\\Hopper.exe',
+        REA_IDA_MCP_CONFIG: '~\\.config\\ida\\mcp.json',
+        REA_JADX_MCP_JAR: '~\\tools\\jadx-headless-mcp-0.7.1-all.jar',
+        REA_APKTOOL_COMMAND: 'C:\\tools\\apktool\\apktool.bat',
+        REA_ADB_PATH: 'C:\\platform-tools\\adb.exe',
+        REA_KUNA_COMMAND: 'C:\\tools\\kuna\\kuna.exe',
+      },
+    }
+    const envPlaceholder = (name) => {
+      const example = ENV_EXAMPLES[PLATFORM][name]
+      return example ? `${t('例如')} ${example}` : null
     }
 
     const ENGINE_GROUPS = [
@@ -1286,8 +1331,38 @@ window.__ModuleLoader__.load({
       return { id, state, tone, status, needsCheck }
     }
 
+    // Folders for the install-directory variables; everything else is a file
+    // (an application bundle on macOS counts as one).
+    const PICK_KIND = { GHIDRA_INSTALL_DIR: 'dir', JAVA_HOME: 'dir' }
+
+    // Folders go through DSH's own native chooser when the app provides one
+    // (Electron on macOS, Windows and Linux); files, and any machine without it,
+    // use the host's dialog route.
+    async function browseForPath(varName) {
+      const kind = PICK_KIND[varName] ?? 'file'
+      const native = globalThis.__DSH_DIRECTORY_PICKER__
+      if (kind === 'dir' && typeof native?.pick === 'function') {
+        try {
+          return { path: await native.pick() }
+        } catch {
+          // fall through to the host dialog
+        }
+      }
+      const result = await post({ action: 'pick-path', kind, lang: LOCALE })
+      if (!result) return { error: t('无法打开选择对话框，请直接填写路径。') }
+      // The browser half hot-reloads but the host half does not: a host that
+      // predates this action answers with its generic "open/closed" refusal.
+      if (result.ok === false && /open\/closed choice/i.test(result.message ?? '')) {
+        return { error: t('宿主端还是旧版本，尚不支持选择对话框。请在 插件 → 已安装 中把本插件关闭再开启，或直接填写路径。') }
+      }
+      if (result.ok === false) return { error: result.message || t('无法打开选择对话框，请直接填写路径。') }
+      return { path: result.path ?? null }
+    }
+
     function EnvVarEditor({ variable, busy, onSave }) {
       const { name: varName, set, value, fromHostEnv } = variable
+      const [picking, setPicking] = React.useState(false)
+      const [pickError, setPickError] = React.useState('')
       const savedValue = value ?? ''
       const [draft, setDraft] = React.useState(savedValue)
       React.useEffect(() => { setDraft(savedValue) }, [savedValue])
@@ -1295,11 +1370,23 @@ window.__ModuleLoader__.load({
       const canSave = !busy && trimmed.length > 0 && trimmed !== savedValue
       const placeholder = fromHostEnv
         ? t('已由宿主环境变量设置（可填写绝对路径覆盖）')
-        : (ENV_PLACEHOLDERS[varName] ?? tt`填写 ${varName} 的绝对路径`)
+        : (envPlaceholder(varName) ?? tt`填写 ${varName} 的绝对路径`)
 
       const submit = (event) => {
         event?.preventDefault?.()
         if (canSave) return onSave(varName, trimmed)
+      }
+
+      const browse = async () => {
+        setPickError('')
+        setPicking(true)
+        try {
+          const picked = await browseForPath(varName)
+          if (picked.error) setPickError(picked.error)
+          else if (picked.path) setDraft(picked.path)
+        } finally {
+          setPicking(false)
+        }
       }
 
       return h('li', { className: 'rea-env-row' },
@@ -1322,6 +1409,14 @@ window.__ModuleLoader__.load({
             'aria-label': tt`${varName} 路径`,
             onChange: (event) => setDraft(event?.target?.value ?? ''),
           }),
+          h('button', {
+            type: 'button',
+            className: 'rea-path-browse',
+            disabled: busy || picking,
+            title: PICK_KIND[varName] === 'dir' ? t('选择文件夹') : t('选择文件'),
+            'aria-label': tt`选择 ${varName} 路径`,
+            onClick: browse,
+          }, IconFolderOpenOutlineRegular ? h(IconFolderOpenOutlineRegular, null) : '…'),
           h(Button, {
             type: 'button',
             variant: 'outline',
@@ -1338,6 +1433,7 @@ window.__ModuleLoader__.load({
             'aria-label': tt`清除 ${varName}`,
             onClick: () => { setDraft(''); return onSave(varName, '') },
           }, t('清除')),
+          pickError && h('p', { className: 'rea-env-error', role: 'alert' }, pickError),
         ),
       )
     }
@@ -1417,10 +1513,12 @@ window.__ModuleLoader__.load({
               })),
             ),
           ),
+          !available && !canInstall && variables?.length > 0 && h('p', { className: 'rea-detail-guide' },
+            t('未能自动识别时，在上方填写本机的安装路径，保存后会自动重新检测。')),
           (installing || savingEnv) && h('div', { role: 'status', className: 'rea-muted' },
             h(Status, { state: 'ongoing' },
               installing
-                ? tt`正在执行 ${installCommand || t('Homebrew 安装')}（可能需要几分钟）…`
+                ? (installCommand ? tt`正在安装：${installCommand}（可能需要几分钟）…` : t('正在安装（可能需要几分钟）…'))
                 : operationMeta(envOp)?.pending,
             ),
           ),

@@ -31,9 +31,9 @@
 
 ## 分析引擎与依赖
 
-**重新检测**会重新运行 `rea doctor --client dsh --format json` 并探测本机 Homebrew / PATH 中的 Java、apktool 与 adb 状态。体检最长可能运行 30 秒，期间面板先显示缓存结果并提示「体检仍在后台运行」，完成后自动更新。引擎按场景分组展示；点击任意条目可展开中文配置说明、带路径输入框的环境变量配置（保存后自动同步到 DSH 注册并重新检测）、结构化的 `rea doctor` 诊断信息及官方下载/配置入口（已配置但检测异常的条目会默认展开提醒）。
+**重新检测**会重新运行 `rea doctor --client dsh --format json` 并探测本机常见位置和 PATH 中的 Java、apktool 与 adb 状态。体检最长可能运行 30 秒，期间面板先显示缓存结果并提示「体检仍在后台运行」，完成后自动更新。引擎按场景分组展示；点击任意条目可展开中文配置说明、带路径输入框的环境变量配置（保存后自动同步到 DSH 注册并重新检测）、结构化的 `rea doctor` 诊断信息及官方下载/配置入口（已配置但检测异常的条目会默认展开提醒）。
 
-在已安装 Homebrew 的 macOS 上，`Ghidra`、`Java (JDK)`、`apktool` 和 `adb` 支持在展开详情中直接点击 **一键安装**（安装后自动探测路径并写入配置）。
+`Ghidra`、`Java (JDK)`、`apktool` 和 `adb` 在 macOS、Linux、Windows 上都支持在展开详情里点击 **一键安装**，体验一致：安装后自动探测路径并写入配置，再重新检测。已安装 Homebrew 的 macOS 走 `brew install`；其余情况（Linux、Windows，以及没有 Homebrew 的 macOS）改为下载官方发布包：Ghidra 和 apktool 来自 GitHub Release，Temurin 21 来自 adoptium.net，platform-tools 来自 dl.google.com。只有厂商给出 SHA-256（Google 为 SHA-1）且下载内容与之一致才会解压，解压到 `$DSH_HOME/rea-engines/`，不需要管理员权限。Ghidra 和 apktool 在找不到 JDK 时会先装 Temurin。没有免费安装包的引擎（Hopper、IDA、jadx、Kuna），以及厂商没有提供对应构建的 ARM 版 Linux/Windows，只显示官方链接和路径输入框。JDK 检测会查看各平台的常见位置和上述下载目录。
 
 | 引擎 | 宿主环境变量 |
 |---|---|
@@ -48,6 +48,8 @@
 
 每个条目都带有对应的下载或配置入口。REA、Ghidra、Hopper、IDA、Java、jadx、apktool、platform-tools 和 Kuna 均从各自的官方或上游页面打开。IDA 额外提供 IDA MCP 配置指南。
 
+每个路径输入框右侧都有一个文件夹图标，点击后弹出系统自带的选择对话框，选中的路径只会填进输入框，仍需点击 **保存并检测** 才生效。`GHIDRA_INSTALL_DIR` 和 `JAVA_HOME` 选文件夹（优先使用 DSH 自带的目录选择器），其余变量选文件（macOS 上的 `.app` 也可选）。macOS 使用系统对话框，Windows 使用资源管理器对话框，Linux 使用 `zenity`，没有时改用 `kdialog`；两者都没有时提示直接填写路径。
+
 环境变量必须填写真实存在的绝对路径（支持 `~`），路径类型不符会在保存前被拒绝。其中 `REA_*_COMMAND`、`HOPPER_LAUNCHER_PATH` 等指向 REA 会执行的程序，请只指向可信软件。
 
 没有上游检查结果的条目会报告环境变量是否已设置。Java、apktool 和 adb 也可能通过 `PATH` 找到。引擎只在相关分析中需要，JavaScript / Electron 和 .NET 静态检查可以直接开始。
@@ -60,7 +62,7 @@
 |---|---|---|
 | `/api/dsh-rea-gate/state` | GET | 注册（含 `healthy` 判定）、版本、默认值、`exposed` 和引擎。用 `session=<id>` 查询会话可见数，用 `refresh=1` 重新体检。`checks: "pending"` 表示体检仍在后台运行，面板会自动重读。 |
 | `/api/dsh-rea-gate/toggle` | POST | `{ open }` 设置默认值，`{ session, open }` 只切换该会话。带 `workspace` 或 `remember` 的请求会被拒绝（400）。 |
-| `/api/dsh-rea-gate/toggle` | POST | `{ action }` 支持 `install`、`reinstall`、`update`、`uninstall`（可选 `removePackage: true`）、`check-update`、`install-engine`（`engine`）与 `set-env`（`values`）。 |
+| `/api/dsh-rea-gate/toggle` | POST | `{ action }` 支持 `install`、`reinstall`、`update`、`uninstall`（可选 `removePackage: true`）、`check-update`、`install-engine`（`engine`）、`set-env`（`values`）与 `pick-path`（`kind` 为 `dir` 或 `file`，弹出本机选择对话框，只返回选中的路径）。 |
 | `/api/dsh-rea-gate/diagnose` | GET | `graph.selfPresent` 表示宿主模块图中是否包含本插件。面板底部的 **高级诊断** 可直接查询。 |
 
 门控关闭的会话会被定期复查：REA 晚于会话连接、或更新后新增的工具会被补充隐藏。若关闭的会话仍能看到 REA 工具，状态里的 `exposed` 为 true，下拉显示「REA 关（未生效）」。

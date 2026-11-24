@@ -6,6 +6,7 @@ const jadxSha = '6e5eacf500b64292bfb73c49797c1958f6ee44646e43e868039ae7feb573ff7
 const jadxJarUrl = 'https://github.com/1013503897/jadx-headless-mcp/releases/download/v0.7.1/jadx-headless-mcp-0.7.1-all.jar'
 
 const posts = []
+let pickAnswer = { ok: true, json: async () => ({ ok: true, path: '/picked/jadx.jar' }) }
 let state = {
   installed: true,
   cli: 'available',
@@ -106,6 +107,9 @@ globalThis.fetch = async (_url, init) => {
       }
       return { ok: true, json: async () => ({ ...state, ok: true, message: 'installed apktool' }) }
     }
+    if (body.action === 'pick-path') {
+      return pickAnswer
+    }
     if (body.action === 'set-env') {
       const [key, value] = Object.entries(body.values)[0]
       state = {
@@ -166,7 +170,36 @@ await findButton(await render('main'), '保存 REA_JADX_MCP_JAR').props.onClick(
 assert.deepEqual(posts.at(-1), { action: 'set-env', values: { REA_JADX_MCP_JAR: '/tools/jadx-headless-mcp.jar' } })
 assert.ok(findButton(await render('main'), '清除 REA_JADX_MCP_JAR'))
 
-// One-click Homebrew install works inside the expanded detail panel for supported open-source engines.
+// The browse button: files use the host dialog, folders prefer DSH's own native chooser, and a failure is shown inline.
+const pathInput = (tree, name) => findElement(tree, ({ type, props }) => type === 'input' && props['aria-label'] === `${name} 路径`)
+await findButton(await render('main'), '选择 REA_JADX_MCP_JAR').props.onClick()
+assert.deepEqual(posts.at(-1), { action: 'pick-path', kind: 'file', lang: 'zh' })
+assert.equal(pathInput(await render('main'), 'REA_JADX_MCP_JAR').props.value, '/picked/jadx.jar', 'the chosen path fills the field and is not saved yet')
+assert.notDeepEqual(posts.at(-1).action, 'set-env')
+pickAnswer = { ok: true, json: async () => ({ ok: true, path: null }) }
+await findButton(await render('main'), '选择 REA_JADX_MCP_JAR').props.onClick()
+assert.equal(pathInput(await render('main'), 'REA_JADX_MCP_JAR').props.value, '/picked/jadx.jar', 'cancelling keeps what was typed')
+pickAnswer = { ok: false, json: async () => ({ ok: false, message: 'No file dialog is available.' }) }
+await findButton(await render('main'), '选择 REA_JADX_MCP_JAR').props.onClick()
+assert.match(text(await render('main')), /No file dialog is available\./)
+// A host that predates the action refuses it generically; say what to do instead of showing that.
+pickAnswer = { ok: false, json: async () => ({ ok: false, message: 'Expected an open/closed choice.' }) }
+await findButton(await render('main'), '选择 REA_JADX_MCP_JAR').props.onClick()
+assert.match(text(await render('main')), /宿主端还是旧版本/)
+assert.doesNotMatch(text(await render('main')), /Expected an open\/closed choice/)
+findButton(await render('main'), 'Ghidra').props.onClick()
+const nativeCalls = []
+globalThis.__DSH_DIRECTORY_PICKER__ = { pick: async () => { nativeCalls.push('pick'); return 'C:\\tools\\ghidra' } }
+const postsBefore = posts.length
+await findButton(await render('main'), '选择 GHIDRA_INSTALL_DIR').props.onClick()
+assert.equal(nativeCalls.length, 1)
+assert.equal(posts.length, postsBefore, 'a folder picked natively needs no host round trip')
+assert.equal(pathInput(await render('main'), 'GHIDRA_INSTALL_DIR').props.value, 'C:\\tools\\ghidra')
+delete globalThis.__DSH_DIRECTORY_PICKER__
+await findButton(await render('main'), '选择 GHIDRA_INSTALL_DIR').props.onClick()
+assert.deepEqual(posts.at(-1), { action: 'pick-path', kind: 'dir', lang: 'zh' }, 'without the native chooser the host dialog is used')
+
+// One-click install works inside the expanded detail panel for supported open-source engines.
 findButton(await render('main'), 'apktool').props.onClick()
 const withApktool = await render('main')
 const installApktool = findButton(withApktool, '一键安装 apktool')

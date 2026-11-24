@@ -52,6 +52,7 @@ export function mountClient({ locale = 'zh-CN' } = {}) {
     }),
     StateDot: () => h('span'),
     IconChevronDownOutlineRegular: () => h('span'),
+    IconFolderOpenOutlineRegular: () => h('span'),
     // Stand-in for the host Menu: the anchor, plus the items once it is open.
     Menu: ({ open, items, selectedId, onSelect, anchor }) => h('span', null, anchor,
       open ? h('span', { role: 'listbox' }, items.map((item) => h('button', {

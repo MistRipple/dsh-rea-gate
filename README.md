@@ -16,7 +16,7 @@ REA registers roughly 263 `mcp__rea__*` tools on every DSH session. Most session
   The range is split in two because semver only lets a prerelease satisfy a bound that names the same `major.minor.patch`: the first half covers the 0.2.2 release candidates and stable 0.2.x, the second the 0.2.3 alphas. Live-tested on 0.2.3-alpha.2; the 0.2.2 line (the npm `latest` tag, 0.2.2-rc.5) was checked against its published packages — every host and client API the bundle uses is present there — but not run in a live Desktop.
 - The REA CLI (`rea-agents`) for the install and update actions. Gating itself works whenever REA is already registered with DSH.
 - Node.js 20 or newer, which DSH already requires.
-- macOS or Linux. The gate itself is plain JavaScript and should work anywhere DSH does; the install, update and engine helpers have Windows handling (`.cmd` launchers) that has not been tested on Windows. Homebrew engine installs are macOS only.
+- macOS, Linux or Windows. The gate itself is plain JavaScript and works anywhere DSH does. The REA install, update and uninstall actions handle Windows `.cmd` launchers, and the one-click engine installs behave the same on all three systems (see below). The Windows and Linux paths have been exercised against the real vendor downloads only on macOS so far; a first run on Windows or Linux is still outstanding.
 
 ## Install
 
@@ -62,8 +62,10 @@ On `agent/created` the plugin reads the state file. For a session that starts cl
 - **Uninstall** runs `rea uninstall`, which has no per-client option: it removes the registrations and skill files REA created for **every** client it configured, not only DSH. The panel asks for confirmation first. With the extra checkbox it also runs `npm uninstall --global rea-agents`.
 - **Agent access** is limited to `status`, `on` and `off`. Install, update and uninstall are reachable only through the owner's panel.
 - **Check for updates** runs `npm view rea-agents` and so contacts the npm registry; **Update** runs `rea update`.
-- **One-click engine installs** (macOS with Homebrew) run `brew install ghidra`, `brew install openjdk@21`, `brew install apktool` or `brew install --cask android-platform-tools`.
+- **One-click engine installs** (Ghidra, Java, apktool, adb) work the same on macOS, Linux and Windows. macOS with Homebrew runs `brew install ghidra`, `brew install openjdk@21`, `brew install apktool` or `brew install --cask android-platform-tools`. Everywhere else (Linux, Windows, macOS without Homebrew) the plugin downloads the official release instead: Ghidra and apktool from their GitHub releases, Temurin 21 from adoptium.net, platform-tools from dl.google.com. Each archive is accepted only if the vendor publishes a SHA-256 (SHA-1 for Google) and the download matches it, is unpacked under `$DSH_HOME/rea-engines/` with no administrator rights, and its path is written to the REA environment automatically. Ghidra and apktool install Temurin first when no JDK is found. Hosts are limited to `api.github.com`, `github.com`, `api.adoptium.net` and `dl.google.com`. Engines without a free archive (Hopper, IDA, jadx, Kuna), and Linux/Windows on ARM where the vendor ships no build, show the upstream links and a path field instead.
 - The engine panel can write REA environment variables (`GHIDRA_INSTALL_DIR`, `JAVA_HOME`, `REA_APKTOOL_COMMAND`, …) into the DSH registration. Values must be existing absolute paths of the right kind (`~` is expanded); anything else is refused before it is saved. Several of these variables name programs REA will execute, so only point them at software you trust.
+- **REA install behind a damaged npm cache**: if `npm install` fails with a corrupted `_cacache` entry (ENOENT or EINTEGRITY), the plugin retries once with a throwaway cache in the system temp folder and never touches your own cache.
+- **Browse buttons**: each engine path field has a folder icon that opens the system chooser on the machine running DSH (AppleScript on macOS, the Windows common dialogs through PowerShell, `zenity` or `kdialog` on Linux; DSH's own folder chooser is used for the two folder variables when available). The chosen path only fills the field; nothing is saved until you press save. It returns the path and reads nothing else.
 - Panel messages follow the browser language (Chinese for `zh-*`, English otherwise).
 - Its HTTP routes live under `/api/dsh-rea-gate/` and are only reachable through the authenticated owner connection.
 
@@ -82,7 +84,7 @@ REA 会向每个会话注册约 263 个 `mcp__rea__*` 工具，大多数会话�
 - 安装：在 **插件 → 发现** 里搜索 REA 安装，装完重启 DSH；命令行环境用 `dsh plugin --profile <profile> add dsh-rea-gate`。Desktop 的 `desktop` profile 由应用管理，请走「发现」。
 - 使用：侧栏 **REA**、插件详情页、输入框左下角的 REA 下拉，或 `rea_gate` 工具（仅 `status` / `on` / `off`；安装、更新、卸载只能在面板里操作）。
 - 状态：`$DSH_HOME/rea-gate.json`。只保存一个全局默认（新会话的初始状态）。输入框里的 REA 下拉和助手调用的 `rea_gate on/off` 都只改当前会话，互不影响，也不写文件；改全局默认不会动运行中的会话。旧版本保存的工作区规则会被忽略。
-- 注意：`install` 会执行 `rea setup --client dsh --yes`，缺 CLI 时先 `npm install --global rea-agents@latest`；`uninstall` 执行 `rea uninstall`，会清理 REA 为**所有客户端**创建的注册和技能文件（该命令不支持按客户端限定），面板会先要求确认。`检查更新` 会访问 npm registry，一键安装引擎会执行 `brew install`。引擎环境变量必须是真实存在的绝对路径（支持 `~`）。界面语言跟随浏览器（中文或英文）。
+- 注意：`install` 会执行 `rea setup --client dsh --yes`，缺 CLI 时先 `npm install --global rea-agents@latest`；`uninstall` 执行 `rea uninstall`，会清理 REA 为**所有客户端**创建的注册和技能文件（该命令不支持按客户端限定），面板会先要求确认。`检查更新` 会访问 npm registry，一键安装引擎在三个系统上体验一致：macOS 有 Homebrew 时执行 `brew install`，其余情况下载官方发布包，校验 SHA-256 后解压到 `$DSH_HOME/rea-engines/`，不需要管理员权限，并自动写入路径。引擎环境变量必须是真实存在的绝对路径（支持 `~`）。界面语言跟随浏览器（中文或英文）。
 
 完整中文说明见 [docs/DETAIL.md](docs/DETAIL.md)。
 

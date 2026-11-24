@@ -23,10 +23,13 @@ import {
   HEALTHY_REGISTRATION,
   detectHomebrewPrefix,
   effectiveEnv,
+  installReaPackage,
   parseJsonOutput,
   resolveNpmGlobalBin,
   runCommand,
 } from './lib/rea-cli.js'
+import { canDownload, enginesRoot, installEngineByDownload } from './lib/engine-download.js'
+import { pickPath } from './lib/pick-path.js'
 import {
   ALLOWED_ENGINE_ENV,
   ENGINE_INSTALLERS,
@@ -230,7 +233,7 @@ export function apply(ctx) {
       let result
 
       if (action === 'reinstall') {
-        result = await runCommand('npm', ['install', '--global', 'rea-agents@latest'], 300_000, { env })
+        result = await installReaPackage(env)
         if (result.ok) {
           const npmBin = await resolveNpmGlobalBin()
           if (npmBin) extraDirs = [npmBin]
@@ -247,7 +250,7 @@ export function apply(ctx) {
       } else {
         result = await runCommand('rea', COMMANDS[action], 180_000, { env })
         if (action === 'install' && result.code === 'ENOENT' && !process.env.REA_BIN) {
-          const npmResult = await runCommand('npm', ['install', '--global', 'rea-agents@latest'], 300_000, { env })
+          const npmResult = await installReaPackage(env)
           if (npmResult.ok) {
             const npmBin = await resolveNpmGlobalBin()
             if (npmBin) extraDirs = [npmBin]
@@ -269,9 +272,10 @@ export function apply(ctx) {
     const installer = Object.hasOwn(ENGINE_INSTALLERS, engineId) ? ENGINE_INSTALLERS[engineId] : null
     if (!installer) return { ok: false, status: 400, message: `Unsupported engine installer: ${engineId}` }
     const brewPrefix = detectHomebrewPrefix()
-    if (!brewPrefix) {
-      return { ok: false, status: 409, message: tr('未检测到 Homebrew，请点击官方链接手动安装并配置路径。', 'Homebrew was not found. Use the official link to install the engine and set its path by hand.') }
+    if (!brewPrefix && !canDownload(engineId)) {
+      return { ok: false, status: 409, message: tr('这台机器暂不支持一键安装该引擎，请点击官方链接手动安装并配置路径。', 'One-click install is not available for this engine on this machine. Use the official link to install it and set its path by hand.') }
     }
+    if (!brewPrefix) return downloadEngine(engineId, tr)
     return exclusive(async () => {
       const brewResult = await runCommand('brew', installer.args, 600_000)
       if (!brewResult.ok) {
@@ -308,6 +312,39 @@ export function apply(ctx) {
         if (!sync.ok && sync.code !== 'ENOENT') {
           logs.push(sync.err || sync.out)
         }
+      }
+      await diagnosing
+      await inspectRea(true)
+      return { ok: true, message: logs.join('\n').slice(0, 12_000) }
+    }, tr)
+  }
+
+  /**
+   * The same one-click install for machines without Homebrew (Linux, Windows,
+   * and macOS without brew): fetch the official archive, verify it, unpack it
+   * and point REA at it.
+   */
+  function downloadEngine(engineId, tr) {
+    return exclusive(async () => {
+      let installed
+      try {
+        installed = await installEngineByDownload(engineId, {
+          root: enginesRoot(),
+          run: (command, args, timeout) => runCommand(command, args, timeout),
+          hasJava: () => {
+            const state = readState()
+            return probeJavaHome(effectiveEnv(state), null).available
+          },
+        })
+      } catch (error) {
+        return { ok: false, message: String(error?.message ?? error).slice(0, 12_000) }
+      }
+      const discovered = { ...installed.discovered }
+      const logs = [...installed.logs]
+      if (Object.keys(discovered).length > 0) {
+        updateState((current) => { current.env = { ...current.env, ...discovered } })
+        const sync = await syncRegistrationWithEnv(readState())
+        if (!sync.ok && sync.code !== 'ENOENT') logs.push(sync.err || sync.out)
       }
       await diagnosing
       await inspectRea(true)
@@ -648,6 +685,19 @@ export function apply(ctx) {
             if (body?.action === 'set-env' && body.values && typeof body.values === 'object') {
               const result = await setEngineEnv(body.values, tr)
               return json({ ...stateFor(undefined, tr), ...result }, outcomeStatus(result))
+            }
+            if (body?.action === 'pick-path' && (body.kind === 'dir' || body.kind === 'file')) {
+              // The panel knows which language it shows; the header may disagree with it.
+              const say = body.lang === 'zh' ? (chinese) => chinese : body.lang === 'en' ? (_chinese, text) => text : tr
+              const picked = await pickPath(
+                body.kind,
+                body.kind === 'dir' ? say('选择文件夹', 'Choose a folder') : say('选择文件', 'Choose a file'),
+              )
+              if (picked.ok) return json({ ok: true, path: picked.path })
+              const message = picked.unsupported
+                ? tr('这台机器没有可用的文件选择对话框（Linux 需要 zenity 或 kdialog），请直接填写路径。', 'No file dialog is available on this machine (Linux needs zenity or kdialog). Type the path instead.')
+                : picked.message
+              return json({ ok: false, unsupported: picked.unsupported === true, message }, picked.unsupported ? 501 : 500)
             }
             if (body?.action === 'check-update') {
               const result = await runCommand('npm', ['view', 'rea-agents', 'dist-tags.latest', '--json'], 15_000)
