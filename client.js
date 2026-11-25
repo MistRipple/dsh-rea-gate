@@ -92,6 +92,8 @@ window.__ModuleLoader__.load({
       '通过 npm 安装命令行工具并注册到 DSH。': 'Installs the command-line tool through npm and registers it with DSH.',
       '重新检测本机': 'Re-check this machine',
       '无法读取 REA 命令行状态。': 'Could not read the REA command-line status.',
+      '无法读取 REA 命令行状态（常见原因：Node.js 缺失或版本过旧）。': 'Could not read the REA command-line status (often caused by missing or outdated Node.js).',
+      '重新安装 REA': 'Reinstall REA',
       '注册到 DSH': 'Register with DSH',
       '已找到本机 REA，可直接注册。': 'REA was found on this machine and can be registered directly.',
       '修复注册': 'Repair registration',
@@ -248,15 +250,20 @@ window.__ModuleLoader__.load({
 .rea-composer-trigger:disabled { color: var(--dsw-alias-label-dimmed); cursor: default; }
 .rea-composer-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rea-composer-chevron {
-  display: inline-flex; flex: 0 0 auto; color: var(--dsw-alias-label-caption); transition: transform 120ms ease;
+  display: inline-flex; flex: 0 0 auto; color: var(--dsw-alias-label-caption);
+  transition: transform 120ms var(--ds-ease-in-out, ease);
 }
 .rea-composer-chevron-open { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .rea-composer-chevron { transition-duration: 0ms !important; }
+}
 `
     const CHIP_POLL_MS = 5_000
 
     const CSS = `
       .rea-gate {
         color: var(--dsw-alias-label-primary);
+        font-family: var(--dsw-font-family, inherit);
         font-size: 13px;
         line-height: 20px;
         min-width: 0;
@@ -283,19 +290,17 @@ window.__ModuleLoader__.load({
         padding: 0 clamp(24px, 4vw, 48px) 48px;
       }
       @media (max-width: 767px) {
-        .rea-gate-page-inner {
-          padding-inline: 20px;
-        }
+        .rea-gate-page-inner { padding-inline: 20px; }
       }
       .rea-gate h1, .rea-gate h3, .rea-gate h4, .rea-gate p, .rea-gate dl, .rea-gate dd { margin: 0; }
       .rea-gate h1 { font-size: 20px; font-weight: 500; line-height: 28px; }
       .rea-gate h3 { font-size: 14px; font-weight: 500; line-height: 20px; color: var(--dsw-alias-label-primary); }
-      .rea-gate-controls { display: grid; gap: 24px; }
-      .rea-gate-page .rea-gate-controls { gap: 28px; }
+      .rea-gate-controls { display: grid; gap: 22px; }
+      .rea-gate-page .rea-gate-controls { gap: 26px; }
 
       .rea-gate .rea-page-head {
         display: flex; align-items: center; gap: 12px;
-        padding-top: 28px; margin-bottom: 24px;
+        padding-top: 28px; margin-bottom: 22px;
       }
       [data-platform='darwin'] .rea-gate-page .rea-page-head {
         padding-top: calc(28px + var(--dsh-frame-top-clearance, 0px));
@@ -305,12 +310,13 @@ window.__ModuleLoader__.load({
         width: 36px; height: 36px; border-radius: var(--dsw-radius-sm, 8px);
         border: 0.5px solid var(--dsw-alias-settings-card-stroke, var(--dsw-alias-border-l2));
         background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
+        color: var(--dsw-alias-label-primary);
       }
       .rea-gate .rea-page-sub { margin-top: 2px; }
 
       .rea-gate .rea-heading {
         display: flex; align-items: flex-end; justify-content: space-between;
-        gap: 8px 16px; flex-wrap: wrap; margin-bottom: 10px;
+        gap: 8px 16px; flex-wrap: wrap; margin-bottom: 8px;
       }
       .rea-gate .rea-heading-main { min-width: 0; }
       .rea-gate .rea-heading-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
@@ -320,6 +326,7 @@ window.__ModuleLoader__.load({
       }
       .rea-gate .rea-label { font-size: 13px; font-weight: 500; line-height: 20px; }
 
+      /* Layer 1: Outer Group Card (strictly <= 2 surface layers across the entire view) */
       .rea-gate .rea-group {
         border: 0.5px solid var(--dsw-alias-settings-card-stroke, var(--dsw-alias-border-l2));
         background: var(--dsw-alias-settings-card-fill, var(--dsw-alias-bg-layer-1));
@@ -336,7 +343,6 @@ window.__ModuleLoader__.load({
       .rea-gate .rea-content { padding: 12px 16px; min-width: 0; }
       .rea-gate .rea-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       .rea-gate .rea-list { margin: 0; padding: 0; list-style: none; }
-      .rea-gate .rea-stack { display: grid; gap: 8px; }
       .rea-gate .rea-status { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 
       .rea-gate .rea-setting-row { flex-wrap: wrap; }
@@ -344,7 +350,7 @@ window.__ModuleLoader__.load({
       .rea-gate .rea-setting-info p { margin-top: 2px; }
       .rea-gate .rea-setting-actions { margin-inline-start: auto; justify-content: flex-end; }
 
-      /* Badges & Pills */
+      /* Badges & Pills (100% host semantic tokens, zero hex literals) */
       .rea-gate .rea-badge {
         display: inline-flex; align-items: center; gap: 5px;
         padding: 2px 8px; border-radius: 999px;
@@ -352,25 +358,21 @@ window.__ModuleLoader__.load({
         white-space: nowrap; font-variant-numeric: tabular-nums;
         background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
         color: var(--dsw-alias-label-secondary);
-        border: 0.5px solid transparent;
       }
       .rea-gate .rea-badge[data-tone="ready"] {
         background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);
         color: var(--dsw-alias-state-success-primary);
-        border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 24%, transparent);
       }
       .rea-gate .rea-badge[data-tone="attention"] {
-        background: color-mix(in srgb, var(--dsw-alias-state-warn-primary, #d97706) 13%, transparent);
-        color: var(--dsw-alias-state-warn-primary, #b45309);
-        border-color: color-mix(in srgb, var(--dsw-alias-state-warn-primary, #d97706) 28%, transparent);
+        background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent);
+        color: var(--dsw-alias-state-warn-label, var(--dsw-alias-state-warn-primary));
       }
       .rea-gate .rea-badge[data-tone="info"] {
-        background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #2563eb) 10%, transparent);
-        color: var(--dsw-alias-state-business-primary, var(--dsw-alias-label-primary));
-        border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary, #2563eb) 22%, transparent);
+        background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 12%, transparent);
+        color: var(--dsw-alias-state-business-primary);
       }
       .rea-gate .rea-version-pill {
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
         font-size: 11.5px; line-height: 16px;
         padding: 2px 7px;
         border-radius: var(--dsw-radius-xs, 4px);
@@ -379,10 +381,10 @@ window.__ModuleLoader__.load({
         font-variant-numeric: tabular-nums;
       }
 
-      /* Overview / Lifecycle */
+      /* Compact Top Status Strip */
       .rea-gate .rea-overview-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .rea-gate .rea-overview-name { font-size: 14px; font-weight: 500; line-height: 22px; }
-      .rea-gate .rea-overview-hint { margin-top: 4px; }
+      .rea-gate .rea-overview-name { font-size: 14px; font-weight: 500; line-height: 20px; }
+      .rea-gate .rea-overview-hint { margin-top: 3px; }
       .rea-gate .rea-maintenance-bar {
         padding: 8px 16px;
         background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
@@ -396,16 +398,17 @@ window.__ModuleLoader__.load({
       .rea-gate .rea-danger-solid {
         background: var(--dsw-alias-state-error-primary) !important;
         border-color: var(--dsw-alias-state-error-primary) !important;
-        color: #fff !important;
+        color: var(--dsw-alias-label-on-color) !important;
       }
 
-      /* Feedback Banner */
+      /* Borderless Feedback Strip & Fixed-Height Log Output */
       .rea-gate .rea-feedback { display: grid; gap: 8px; }
       .rea-gate .rea-feedback-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
       .rea-gate .rea-dismiss {
         appearance: none; border: none; background: transparent; cursor: pointer;
-        color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-size: 14px; line-height: 1;
-        padding: 3px 6px; border-radius: var(--dsw-radius-xs, 4px); flex: none;
+        color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+        display: grid; place-items: center; width: 22px; height: 22px;
+        padding: 0; border-radius: var(--dsw-radius-xs, 4px); flex: none;
       }
       @media (hover: hover) {
         .rea-gate .rea-dismiss:hover {
@@ -413,19 +416,39 @@ window.__ModuleLoader__.load({
           color: var(--dsw-alias-label-primary);
         }
       }
+      .rea-gate .rea-dismiss:focus-visible {
+        outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+        outline-offset: 1px;
+      }
       .rea-gate .rea-output {
-        max-height: 10em; overflow: auto; margin: 0; padding: 8px 10px;
+        max-height: 180px; overflow: auto; resize: none; margin: 0; padding: 8px 10px;
         border-radius: var(--dsw-radius-sm, 8px);
         background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
         white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11.5px; line-height: 17px;
+      }
+      .rea-gate .rea-engine-detail .rea-output {
+        padding: 6px 0 0; border-radius: 0; background: transparent;
+        border-top: 0.5px dashed var(--dsw-alias-border-l2);
       }
       .rea-gate .rea-error { color: var(--dsw-alias-state-error-primary); }
 
-      /* Subheaders inside cards */
+      /* Flat Notice Strip inside Group Card (no nested bordered box) */
+      .rea-gate .rea-sync-banner {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 10px 16px; flex-wrap: wrap;
+        padding: 10px 16px;
+        background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 10%, transparent);
+        color: var(--dsw-alias-state-warn-label, var(--dsw-alias-state-warn-primary));
+        font-size: 12px; line-height: 18px;
+      }
+      .rea-gate .rea-sync-banner p { flex: 1 1 240px; min-width: 0; }
+      .rea-gate .rea-sync-banner button { margin-inline-start: auto; flex: none; }
+
+      /* Group Subheaders (hidden automatically when only 1 group exists) */
       .rea-gate .rea-subhead {
         display: flex; align-items: center; justify-content: space-between; gap: 8px;
-        padding: 7px 16px;
+        padding: 6px 16px;
         background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
         font-size: 12px; font-weight: 500; line-height: 18px;
         color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
@@ -439,7 +462,7 @@ window.__ModuleLoader__.load({
         appearance: none; border: none; background: transparent; width: 100%; text-align: start;
         font: inherit; color: inherit; cursor: pointer;
         display: flex; align-items: center; justify-content: space-between; gap: 12px;
-        padding: 12px 16px;
+        padding: 11px 16px;
         transition: background 140ms var(--ds-ease-in-out, cubic-bezier(0.4, 0, 0.2, 1));
       }
       @media (hover: hover) {
@@ -451,21 +474,20 @@ window.__ModuleLoader__.load({
         outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
         outline-offset: -2px;
       }
-      .rea-gate .rea-engine-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+      .rea-gate .rea-engine-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
       .rea-gate .rea-engine-mark {
         display: grid; place-items: center; flex: none;
-        width: 22px; height: 22px; border-radius: 6px;
+        width: 20px; height: 20px; border-radius: var(--dsw-radius-xs, 4px);
         background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
         color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
-        font-size: 12px; font-weight: 600;
       }
       .rea-gate .rea-engine-mark[data-state="ready"] {
-        background: var(--dsw-alias-state-success-primary);
-        color: #fff;
+        background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent);
+        color: var(--dsw-alias-state-success-primary);
       }
       .rea-gate .rea-engine-mark[data-state="attention"] {
-        background: color-mix(in srgb, var(--dsw-alias-state-warn-primary, #d97706) 16%, transparent);
-        color: var(--dsw-alias-state-warn-primary, #b45309);
+        background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 16%, transparent);
+        color: var(--dsw-alias-state-warn-label, var(--dsw-alias-state-warn-primary));
       }
       .rea-gate .rea-engine-text { min-width: 0; flex: 1; }
       .rea-gate .rea-engine-title-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -475,7 +497,7 @@ window.__ModuleLoader__.load({
         color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
       }
       .rea-gate .rea-engine-desc {
-        margin-top: 2px;
+        margin-top: 1px;
         color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
         font-size: 12px; line-height: 18px;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -489,58 +511,63 @@ window.__ModuleLoader__.load({
       }
       .rea-gate .rea-chevron[data-open="true"] { transform: rotate(90deg); }
 
-      /* Expanded Engine Detail Drawer */
+      /* Layer 2: Edge-to-Edge Flat Disclosure Drawer (zero nested bordered sub-cards) */
       .rea-gate .rea-engine-detail {
-        margin: 0 16px 14px 50px;
-        padding: 12px 14px;
-        border-radius: var(--dsw-radius-sm, 8px);
-        border: 0.5px solid var(--dsw-alias-border-l2);
+        border-top: 0.5px dashed var(--dsw-alias-border-l2);
         background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
-        display: grid; gap: 12px;
+        padding: 12px 16px 14px 46px;
+        display: grid; gap: 10px;
       }
-      .rea-gate .rea-detail-block { display: grid; gap: 6px; min-width: 0; }
-      .rea-gate .rea-detail-label {
-        font-size: 11px; font-weight: 500; line-height: 17px;
-        color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+      .rea-gate .rea-detail-section { display: grid; gap: 6px; min-width: 0; }
+      .rea-gate .rea-detail-section + .rea-detail-section {
+        border-top: 0.5px solid var(--dsw-alias-border-l2);
+        padding-top: 10px;
       }
-      .rea-gate .rea-detail-guide { font-size: 12.5px; color: var(--dsw-alias-label-primary); line-height: 19px; }
+      .rea-gate .rea-detail-guide {
+        flex: 1 1 260px; min-width: 0;
+        font-size: 12px; color: var(--dsw-alias-label-secondary); line-height: 18px;
+      }
 
-      /* Env Var Chips & Path Config */
+      /* Single-row horizontal Env Var + Inline Path Editor (flat, no inner card box) */
       .rea-gate .rea-env-list { display: grid; gap: 8px; }
       .rea-gate .rea-env-row {
-        display: grid; gap: 8px;
-        padding: 8px 10px; border-radius: var(--dsw-radius-sm, 8px);
-        background: var(--dsw-alias-bg-base, var(--dsw-alias-bg-layer-1));
-        border: 0.5px solid var(--dsw-alias-border-l2);
-        min-width: 0;
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 6px 12px; flex-wrap: wrap; min-width: 0;
       }
-      .rea-gate .rea-env-head {
-        display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0;
+      .rea-gate .rea-env-row + .rea-env-row {
+        border-top: 0.5px dashed var(--dsw-alias-border-l2);
+        padding-top: 8px;
       }
-      .rea-gate .rea-env-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+      .rea-gate .rea-env-main {
+        display: inline-flex; align-items: center; gap: 7px;
+        min-width: 175px; flex: 0 1 auto;
+      }
       .rea-gate .rea-env-code {
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
         font-size: 12px; color: var(--dsw-alias-label-primary);
-        overflow-wrap: anywhere;
       }
-      .rea-gate .rea-env-state { font-size: 11.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+      .rea-gate .rea-env-state {
+        font-size: 11.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+        white-space: nowrap;
+      }
       .rea-gate .rea-env-state[data-set="true"] { color: var(--dsw-alias-state-success-primary); font-weight: 500; }
       .rea-gate .rea-env-edit {
-        display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0;
+        display: flex; align-items: center; gap: 6px;
+        flex: 1 1 280px; justify-content: flex-end; flex-wrap: wrap; min-width: 0;
       }
       .rea-gate .rea-path-input {
-        flex: 1 1 200px; min-width: 0; height: 32px; box-sizing: border-box;
+        flex: 1 1 180px; min-width: 0; height: 30px; box-sizing: border-box;
         padding: 0 10px;
         border: 0.5px solid var(--dsw-alias-border-l4, var(--dsw-alias-border-l2));
         border-radius: var(--dsw-radius-sm, 8px);
-        background: var(--dsw-alias-bg-layer-3, var(--dsw-alias-bg-base));
+        background: var(--dsw-alias-bg-base, var(--dsw-alias-bg-layer-1));
         color: var(--dsw-alias-label-primary);
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
         font-size: 12px; line-height: 18px;
       }
       .rea-gate .rea-path-input::placeholder {
         color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
-        font-family: inherit;
+        font-family: var(--dsw-font-family, inherit);
       }
       .rea-gate .rea-path-input:focus {
         outline: none;
@@ -549,44 +576,56 @@ window.__ModuleLoader__.load({
       .rea-gate .rea-path-input:disabled { opacity: 0.6; }
       .rea-gate .rea-path-browse {
         display: inline-flex; align-items: center; justify-content: center;
-        flex: 0 0 auto; width: 32px; height: 32px; box-sizing: border-box; padding: 0;
+        flex: 0 0 auto; width: 30px; height: 30px; box-sizing: border-box; padding: 0;
         border: 0.5px solid var(--dsw-alias-border-l4, var(--dsw-alias-border-l2));
         border-radius: var(--dsw-radius-sm, 8px);
-        background: var(--dsw-alias-bg-layer-3, var(--dsw-alias-bg-base));
+        background: var(--dsw-alias-bg-base, var(--dsw-alias-bg-layer-1));
         color: var(--dsw-alias-label-secondary);
         font-size: 14px; line-height: 1; cursor: pointer;
       }
-      .rea-gate .rea-path-browse:hover:not(:disabled) { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-state-business-primary); }
-      .rea-gate .rea-path-browse:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 1px; }
+      @media (hover: hover) {
+        .rea-gate .rea-path-browse:hover:not(:disabled) {
+          color: var(--dsw-alias-label-primary);
+          background: var(--dsw-alias-interactive-bg-hover);
+        }
+      }
+      .rea-gate .rea-path-browse:focus-visible {
+        outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+        outline-offset: 1px;
+      }
       .rea-gate .rea-path-browse:disabled { opacity: 0.6; cursor: default; }
-      .rea-gate .rea-env-error { flex: 1 1 100%; margin: 0; font-size: 12px; color: var(--dsw-alias-state-danger-primary, #d33); }
+      .rea-gate .rea-env-error {
+        flex: 1 1 100%; margin: 0; font-size: 12px; line-height: 18px;
+        color: var(--dsw-alias-state-error-primary);
+      }
       @media (pointer: coarse) {
         .rea-gate .rea-path-input { font-size: 16px; }
       }
 
-      /* Diagnostic Callout inside Detail */
-      .rea-gate .rea-diag-box {
-        padding: 9px 11px; border-radius: var(--dsw-radius-sm, 8px);
-        background: var(--dsw-alias-bg-base, var(--dsw-alias-bg-layer-1));
-        border: 0.5px solid var(--dsw-alias-border-l2);
-        border-inline-start: 2.5px solid var(--dsw-alias-border-l2);
+      /* Flat Diagnostic Block inside Detail (zero inner border box) */
+      .rea-gate .rea-diag-flat {
         font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary);
-        display: grid; gap: 8px;
+        display: grid; gap: 6px;
       }
-      .rea-gate .rea-diag-box[data-tone="attention"] {
-        border-inline-start-color: var(--dsw-alias-state-warn-primary, #d97706);
-        color: var(--dsw-alias-label-primary);
+      .rea-gate .rea-diag-flat[data-tone="attention"] {
+        color: var(--dsw-alias-state-warn-label, var(--dsw-alias-state-warn-primary));
       }
-      .rea-gate .rea-diag-box[data-tone="ready"] {
-        border-inline-start-color: var(--dsw-alias-state-success-primary);
-        color: var(--dsw-alias-label-primary);
+      .rea-gate .rea-diag-flat[data-tone="ready"] {
+        color: var(--dsw-alias-state-success-primary);
+      }
+      .rea-gate .rea-diag-inline {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 8px 12px; flex-wrap: wrap;
+      }
+      .rea-gate .rea-diag-inline button,
+      .rea-gate .rea-diag-inline .rea-actions {
+        margin-inline-start: auto; flex: none;
       }
       .rea-gate .rea-hash-row {
         display: flex; align-items: center; justify-content: space-between; gap: 8px;
-        padding: 5px 8px; border-radius: var(--dsw-radius-xs, 4px);
-        background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 11.5px; min-width: 0;
+        font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
+        font-size: 11.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+        min-width: 0;
       }
       .rea-gate .rea-hash-val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
       .rea-gate .rea-inline-link {
@@ -597,36 +636,33 @@ window.__ModuleLoader__.load({
         .rea-gate .rea-inline-link:hover { text-decoration: underline; }
       }
 
-      /* Resource Links inside Detail & Headers */
-      .rea-gate .rea-detail-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 2px; }
+      /* Detail Footer: Setup guide on left, links + single Primary CTA on right */
+      .rea-gate .rea-detail-footer {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 8px 16px; flex-wrap: wrap;
+      }
+      .rea-gate .rea-detail-actions {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        margin-inline-start: auto;
+      }
       .rea-gate .rea-download {
         display: inline-flex; align-items: center; gap: 4px;
-        min-height: 28px; padding: 0 10px; border-radius: var(--dsw-radius-sm, 8px);
-        border: 0.5px solid var(--dsw-alias-border-l2);
-        background: var(--dsw-alias-bg-base, var(--dsw-alias-bg-layer-1));
-        color: var(--dsw-alias-label-primary);
+        min-height: 28px; padding: 0 8px; border-radius: var(--dsw-radius-sm, 8px);
+        color: var(--dsw-alias-link, var(--dsw-alias-state-business-primary));
         font-size: 12px; font-weight: 500; text-decoration: none;
         transition: background 140ms var(--ds-ease-in-out, cubic-bezier(0.4, 0, 0.2, 1));
       }
       @media (hover: hover) {
         .rea-gate .rea-download:hover {
           background: var(--dsw-alias-interactive-bg-hover);
+          text-decoration: underline;
         }
       }
       .rea-gate .rea-download:focus-visible {
         outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
         outline-offset: 2px;
       }
-      .rea-gate .rea-download-plain {
-        border-color: transparent; background: transparent; padding-inline: 6px;
-        color: var(--dsw-alias-link, var(--dsw-alias-state-business-primary)); font-weight: 400;
-      }
-      @media (hover: hover) {
-        .rea-gate .rea-download-plain:hover {
-          background: transparent;
-          text-decoration: underline;
-        }
-      }
+      .rea-gate .rea-download-plain { font-weight: 400; padding-inline: 6px; }
 
       /* Collapsible Cards (Usage Guide & Advanced Diagnostics) */
       .rea-gate .rea-disclosure-bar {
@@ -669,54 +705,60 @@ window.__ModuleLoader__.load({
         }
       }
 
-      /* Prompt Example Cards */
-      .rea-gate .rea-prompt-card {
-        display: flex; align-items: center; justify-content: space-between; gap: 10px;
-        padding: 9px 10px 9px 12px; border-radius: var(--dsw-radius-sm, 8px);
+      /* Flat Edge-to-Edge Auxiliary Drawer Body (no nested rounded prompt cards) */
+      .rea-gate .rea-drawer-flat {
+        border-top: 0.5px dashed var(--dsw-alias-border-l2);
         background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
-        min-width: 0;
+      }
+      .rea-gate .rea-prompt-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 10px 16px; min-width: 0;
+      }
+      .rea-gate .rea-prompt-row + .rea-prompt-row {
+        border-top: 0.5px solid var(--dsw-alias-border-l2);
       }
       .rea-gate .rea-prompt-text {
         display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1;
         font-size: 12.5px; line-height: 19px; color: var(--dsw-alias-label-primary);
       }
-      .rea-gate .rea-prompt-quote { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-weight: 600; flex: none; }
-      .rea-gate .rea-copy-btn { flex: none; min-width: 56px; justify-content: center; }
+      .rea-gate .rea-prompt-note {
+        padding: 8px 16px 12px;
+        border-top: 0.5px solid var(--dsw-alias-border-l2);
+      }
+      .rea-gate .rea-copy-btn { flex: none; min-width: 64px; justify-content: center; }
       .rea-gate .rea-copy-done { color: var(--dsw-alias-state-success-primary) !important; }
 
       /* Path row in Advanced Diagnostics */
       .rea-gate .rea-path-code {
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
         font-size: 12px; line-height: 18px;
         color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
         overflow-wrap: anywhere;
       }
 
-      /* Dialog */
+      /* Dialog (flat hairline dividers, zero nested boxes) */
       .rea-gate .rea-dialog {
-        box-sizing: border-box; width: min(480px, calc(100vw - 32px));
+        box-sizing: border-box; width: min(460px, calc(100vw - 32px));
         max-height: calc(100dvh - 32px); padding: 0; color: inherit;
         background: var(--dsw-alias-bg-layer-1, Canvas);
         border: 0.5px solid var(--dsw-alias-settings-card-stroke, var(--dsw-alias-border-l2));
         border-radius: var(--dsw-radius-lg, 16px);
-        box-shadow: 0 16px 40px rgb(0 0 0 / 24%);
       }
       .rea-gate .rea-dialog::backdrop { background: var(--dsw-alias-bg-mask-1, rgb(0 0 0 / 24%)); }
       .rea-gate .rea-dialog-title { font-size: 15px; font-weight: 600; line-height: 22px; }
-      .rea-gate .rea-dialog-body { padding: 0 16px 16px; display: grid; gap: 10px; overflow-wrap: anywhere; }
+      .rea-gate .rea-dialog-body { padding: 0 16px 14px; display: grid; gap: 12px; overflow-wrap: anywhere; }
       .rea-gate .rea-impact-list {
-        margin: 0; padding: 10px 12px; list-style: none; border-radius: var(--dsw-radius-sm, 8px);
-        background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
+        margin: 0; padding: 10px 0 0; list-style: none;
+        border-top: 0.5px solid var(--dsw-alias-border-l2);
         display: grid; gap: 6px; font-size: 12px; line-height: 18px;
       }
-      .rea-gate .rea-impact-list li { display: flex; gap: 8px; }
-      .rea-gate .rea-impact-tag { flex: none; font-weight: 600; min-width: 44px; }
+      .rea-gate .rea-impact-list li { display: flex; gap: 10px; }
+      .rea-gate .rea-impact-tag { flex: none; font-weight: 500; min-width: 44px; }
       .rea-gate .rea-impact-remove { color: var(--dsw-alias-state-error-primary); }
       .rea-gate .rea-impact-keep { color: var(--dsw-alias-state-success-primary); }
       .rea-gate .rea-checkbox-row {
         display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
-        padding: 8px 10px; border-radius: var(--dsw-radius-sm, 8px);
-        border: 0.5px solid var(--dsw-alias-border-l2);
+        padding-top: 10px; border-top: 0.5px dashed var(--dsw-alias-border-l2);
         font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-primary);
       }
       .rea-gate .rea-checkbox-row input {
@@ -725,9 +767,14 @@ window.__ModuleLoader__.load({
 
       @container (max-width: 560px) {
         .rea-gate .rea-engine-desc { white-space: normal; }
-        .rea-gate .rea-engine-detail { margin: 0 12px 12px 12px; }
-        .rea-gate .rea-ws-item { flex-wrap: wrap; }
-        .rea-gate .rea-ws-controls { margin-inline-start: auto; }
+        .rea-gate .rea-engine-detail { padding: 12px 16px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .rea-gate *, .rea-gate *::before, .rea-gate *::after {
+          transition-duration: 0ms !important;
+          animation-duration: 0ms !important;
+        }
       }
     `
 
@@ -935,7 +982,7 @@ window.__ModuleLoader__.load({
             followTimer.current?.unref?.()
           }
         } else if (!options.silent) {
-          setFeedback({ operation: 'load', error: true, title: t(t('无法读取本机状态，请重试。')) })
+          setFeedback({ operation: 'load', error: true, title: t('无法读取本机状态，请重试。') })
         }
         reading.current = false
         if (!options.silent) setPending(null)
@@ -975,7 +1022,7 @@ window.__ModuleLoader__.load({
         const success = Boolean(next && next.ok !== false)
         const meta = operationMeta(operation)
         if (!success) {
-          setFeedback({ operation, error: true, title: meta?.failure ?? t(t('操作失败，请重新检测本机状态。')), output: next?.message })
+          setFeedback({ operation, error: true, title: meta?.failure ?? t('操作失败，请重新检测本机状态。'), output: next?.message })
         } else if (meta?.success) {
           setFeedback({ operation, title: meta.success, output: next.message })
         }
@@ -990,14 +1037,73 @@ window.__ModuleLoader__.load({
       return { state, updateLookup, pending, feedback, run, load, checkForUpdates, dismissFeedback, dismissUpdateError }
     }
 
+    /* Unified 16x16 linear icon family (strokeWidth: 1.75, round caps & joins) */
+    function LinearIcon({ size = 14, children }) {
+      return h('svg', {
+        width: size, height: size, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true,
+      }, children)
+    }
+
     function Chevron({ open }) {
       return h('span', { className: 'rea-chevron', 'data-open': String(Boolean(open)), 'aria-hidden': true },
-        h('svg', { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none' },
+        h(LinearIcon, { size: 14 },
           h('path', {
-            d: 'M6 3.5L10.5 8L6 12.5',
-            stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round',
+            d: 'M6 3.75L10.25 8L6 12.25',
+            stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round',
           }),
         ),
+      )
+    }
+
+    function StateGlyph({ state }) {
+      if (state === 'ready') {
+        return h(LinearIcon, { size: 13 },
+          h('path', {
+            d: 'M3.5 8.25L6.5 11.25L12.5 4.75',
+            stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round',
+          }),
+        )
+      }
+      if (state === 'attention') {
+        return h(LinearIcon, { size: 13 },
+          h('path', {
+            d: 'M8 4.25V8.5M8 11.5H8.01',
+            stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round',
+          }),
+        )
+      }
+      return h(LinearIcon, { size: 13 },
+        h('path', {
+          d: 'M4.5 8H11.5',
+          stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round',
+        }),
+      )
+    }
+
+    function ExternalIcon() {
+      return h(LinearIcon, { size: 12 },
+        h('path', {
+          d: 'M5.25 3.75H12.25V10.75M12 4L4 12',
+          stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round',
+        }),
+      )
+    }
+
+    function CloseIcon() {
+      return h(LinearIcon, { size: 12 },
+        h('path', {
+          d: 'M4.25 4.25L11.75 11.75M11.75 4.25L4.25 11.75',
+          stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round',
+        }),
+      )
+    }
+
+    function FolderIconFallback() {
+      return h(LinearIcon, { size: 14 },
+        h('path', {
+          d: 'M2 4.5C2 3.67 2.67 3 3.5 3H6.1L7.4 4.5H12.5C13.33 4.5 14 5.17 14 6V11.5C14 12.33 13.33 13 12.5 13H3.5C2.67 13 2 12.33 2 11.5V4.5Z',
+          stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round',
+        }),
       )
     }
 
@@ -1041,6 +1147,7 @@ window.__ModuleLoader__.load({
         size: 'sm',
         className: status === 'copied' ? 'rea-copy-btn rea-copy-done' : 'rea-copy-btn',
         'aria-label': ariaLabel,
+        title: ariaLabel || label,
         onClick: copy,
       }, caption)
     }
@@ -1050,9 +1157,10 @@ window.__ModuleLoader__.load({
         className: plain ? 'rea-download rea-download-plain' : 'rea-download',
         href,
         'aria-label': label,
+        title: label || undefined,
         target: '_blank',
         rel: 'noopener noreferrer',
-      }, children, h('span', { 'aria-hidden': true }, '↗'))
+      }, children, h(ExternalIcon))
     }
 
     // The npm lookup returns a stable release. A prerelease of the same core is older.
@@ -1076,7 +1184,14 @@ window.__ModuleLoader__.load({
     function versionAction(state, latest, retry) {
       if (state.cli === 'missing') return { action: 'install', label: t('安装 REA'), hint: t('通过 npm 安装命令行工具并注册到 DSH。') }
       if (state.cli === 'unavailable' && !state.version) {
-        return { action: 'reload', label: t('重新检测本机'), hint: t('无法读取 REA 命令行状态。') }
+        return {
+          action: 'reload',
+          label: t('重新检测本机'),
+          hint: state.cliError
+            ? t('无法读取 REA 命令行状态（常见原因：Node.js 缺失或版本过旧）。')
+            : t('无法读取 REA 命令行状态。'),
+          secondary: Boolean(state.cliError),
+        }
       }
       if (!state.installed) {
         return state.version
@@ -1143,7 +1258,7 @@ window.__ModuleLoader__.load({
           ),
         ),
         h('div', { className: 'rea-content rea-divider rea-actions rea-setting-actions' },
-          h(Button, { variant: 'outline', size: 'sm', onClick: close }, t('取消')),
+          h(Button, { variant: 'outline', size: 'sm', autoFocus: true, onClick: close }, t('取消')),
           h(Button, {
             variant: 'primary', size: 'sm', className: 'rea-danger-solid',
             onClick: () => { close(); return onConfirm(removePackage) },
@@ -1160,8 +1275,12 @@ window.__ModuleLoader__.load({
             className: feedback.error ? 'rea-error' : 'rea-muted',
           }, feedback.title),
           onDismiss && h('button', {
-            type: 'button', className: 'rea-dismiss', 'aria-label': t('关闭提示'), onClick: onDismiss,
-          }, '×'),
+            type: 'button',
+            className: 'rea-dismiss',
+            'aria-label': t('关闭提示'),
+            title: t('关闭提示'),
+            onClick: onDismiss,
+          }, h(CloseIcon)),
         ),
         feedback.output && h('pre', {
           className: 'rea-output rea-muted', dir: 'ltr', tabIndex: 0, 'aria-label': t('命令输出'),
@@ -1169,6 +1288,7 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /* Compact single-row overview strip without redundant outer section heading */
     function Lifecycle({ state, updateLookup, pending, feedback, load, run, checkForUpdates, dismissFeedback, dismissUpdateError }) {
       const [confirmUninstall, setConfirmUninstall] = React.useState(false)
       const busy = Boolean(pending) || updateLookup.checking
@@ -1195,8 +1315,10 @@ window.__ModuleLoader__.load({
         return primary.action === 'reload' ? load(true) : run({ action: primary.action }, primary.operation)
       }
       const showReinstall = !state.installed && Boolean(state.version)
+      const cliBroken = state.cli === 'unavailable' && !state.version
+      const showCliError = state.cli === 'unavailable' && Boolean(state.cliError) && !localFeedback
 
-      return h(Section, { title: t('运行状态与更新') },
+      return h('section', { 'aria-label': t('运行状态与更新') },
         h('div', { className: 'rea-group' },
           h('div', { className: 'rea-row rea-setting-row' },
             h('div', { className: 'rea-setting-info' },
@@ -1213,24 +1335,27 @@ window.__ModuleLoader__.load({
                 ),
               ),
               h('p', { className: 'rea-muted rea-overview-hint', role: 'status' },
-                updateLookup.checking ? t('正在查询 npm 稳定版…') : primary.hint,
+                [updateLookup.checking ? t('正在查询 npm 稳定版…') : primary.hint, toolsNotice].filter(Boolean).join(' · '),
               ),
-              toolsNotice && h('p', { className: 'rea-muted rea-overview-hint' }, toolsNotice),
             ),
             h('div', { className: 'rea-actions rea-setting-actions' },
-              h(Button, { variant: primary.secondary ? 'outline' : 'primary', size: 'sm', disabled: busy, onClick: start },
-                updateLookup.checking ? t('检查中…') : primary.label),
+              !canMaintain && h(DownloadLink, { href: 'https://rea.tools/get-started/', plain: true, label: t('REA 安装指南') }, t('REA 安装指南')),
               showReinstall && h(Button, {
                 variant: 'outline', size: 'sm', disabled: busy,
                 onClick: () => run({ action: 'reinstall' }, 'reinstall'),
               }, t('重装最新版')),
-              !canMaintain && h(DownloadLink, { href: 'https://rea.tools/get-started/', plain: true }, t('REA 安装指南')),
+              cliBroken && state.cliError && h(Button, {
+                variant: 'primary', size: 'sm', disabled: busy,
+                onClick: () => run({ action: 'reinstall' }, 'reinstall'),
+              }, t('重新安装 REA')),
+              h(Button, { variant: primary.secondary ? 'outline' : 'primary', size: 'sm', disabled: busy, onClick: start },
+                updateLookup.checking ? t('检查中…') : primary.label),
             ),
           ),
           canMaintain && h('div', { className: 'rea-row rea-setting-row rea-maintenance-bar rea-divider' },
             h('span', { className: 'rea-setting-info rea-muted' }, t('DSH 集成维护')),
             h('div', { className: 'rea-actions rea-setting-actions' },
-              h(DownloadLink, { href: 'https://rea.tools/get-started/', plain: true }, t('REA 安装指南')),
+              h(DownloadLink, { href: 'https://rea.tools/get-started/', plain: true, label: t('REA 安装指南') }, t('REA 安装指南')),
               primary.operation !== 'repair' && h(Button, {
                 variant: 'ghost', size: 'sm', disabled: busy,
                 onClick: () => run({ action: 'install' }, 'repair'),
@@ -1243,6 +1368,9 @@ window.__ModuleLoader__.load({
           ),
           lifecyclePending && h('div', { className: 'rea-content rea-divider', role: 'status' },
             h(Status, { state: 'ongoing' }, operationMeta(pending)?.pending),
+          ),
+          showCliError && h('div', { className: 'rea-content rea-divider' },
+            h('pre', { className: 'rea-output rea-muted', dir: 'ltr', tabIndex: 0, 'aria-label': t('命令输出') }, state.cliError),
           ),
           localFeedback && h('div', { className: 'rea-content rea-divider' },
             h(Feedback, { feedback: localFeedback, onDismiss: dismissFeedback }),
@@ -1369,7 +1497,7 @@ window.__ModuleLoader__.load({
       return { path: result.path ?? null }
     }
 
-    function EnvVarEditor({ variable, busy, onSave }) {
+    function EnvVarEditor({ variable, busy, onSave, onDirty }) {
       const { name: varName, set, value, fromHostEnv } = variable
       const [picking, setPicking] = React.useState(false)
       const [pickError, setPickError] = React.useState('')
@@ -1393,25 +1521,21 @@ window.__ModuleLoader__.load({
         try {
           const picked = await browseForPath(varName)
           if (picked.error) setPickError(picked.error)
-          else if (picked.path) setDraft(picked.path)
+          else if (picked.path) {
+            setDraft(picked.path)
+            onDirty?.()
+          }
         } finally {
           setPicking(false)
         }
       }
 
       return h('li', { className: 'rea-env-row' },
-        h('div', { className: 'rea-env-head' },
-          h('div', { className: 'rea-env-main' },
-            h(StateDot, { state: set ? 'done' : 'idle', size: 7 }),
-            h('code', { className: 'rea-env-code', dir: 'ltr' }, varName),
-            h('span', { className: 'rea-env-state', 'data-set': String(Boolean(set)) }, set ? t('已设置') : t('未设置')),
-          ),
-          h(CopyButton, { text: varName, label: t('复制变量'), ariaLabel: tt`复制环境变量 ${varName}` }),
+        h('div', { className: 'rea-env-main' },
+          h(StateDot, { state: set ? 'done' : 'idle', size: 7 }),
+          h('code', { className: 'rea-env-code', dir: 'ltr' }, varName),
+          h('span', { className: 'rea-env-state', 'data-set': String(Boolean(set)) }, set ? t('已设置') : t('未设置')),
         ),
-        variable.sync && variable.sync !== 'ok' && h('p', { className: 'rea-env-error', role: 'status' },
-          variable.sync === 'different'
-            ? t('DSH 的 REA 注册里是另一个值，会话里的 REA 不会用到这里保存的路径。')
-            : t('已保存，但还没有写入 DSH 的 REA 注册，会话里的 REA 读不到它。')),
         h('form', { className: 'rea-env-edit', onSubmit: submit },
           h('input', {
             type: 'text',
@@ -1421,7 +1545,10 @@ window.__ModuleLoader__.load({
             placeholder,
             disabled: busy,
             'aria-label': tt`${varName} 路径`,
-            onChange: (event) => setDraft(event?.target?.value ?? ''),
+            onChange: (event) => {
+              setDraft(event?.target?.value ?? '')
+              onDirty?.()
+            },
           }),
           h('button', {
             type: 'button',
@@ -1430,25 +1557,33 @@ window.__ModuleLoader__.load({
             title: PICK_KIND[varName] === 'dir' ? t('选择文件夹') : t('选择文件'),
             'aria-label': tt`选择 ${varName} 路径`,
             onClick: browse,
-          }, IconFolderOpenOutlineRegular ? h(IconFolderOpenOutlineRegular, null) : '…'),
+          }, IconFolderOpenOutlineRegular ? h(IconFolderOpenOutlineRegular, null) : h(FolderIconFallback)),
           h(Button, {
             type: 'button',
             variant: 'outline',
             size: 'sm',
             disabled: !canSave,
             'aria-label': tt`保存 ${varName}`,
+            title: tt`保存 ${varName}`,
             onClick: submit,
           }, t('保存并检测')),
+          h(CopyButton, { text: varName, label: t('复制变量'), ariaLabel: tt`复制环境变量 ${varName}` }),
           savedValue && h(Button, {
             type: 'button',
             variant: 'ghost',
             size: 'sm',
+            className: 'rea-danger-ghost',
             disabled: busy,
             'aria-label': tt`清除 ${varName}`,
+            title: tt`清除 ${varName}`,
             onClick: () => { setDraft(''); return onSave(varName, '') },
           }, t('清除')),
-          pickError && h('p', { className: 'rea-env-error', role: 'alert' }, pickError),
         ),
+        variable.sync && variable.sync !== 'ok' && h('p', { className: 'rea-env-error', role: 'status' },
+          variable.sync === 'different'
+            ? t('DSH 的 REA 注册里是另一个值，会话里的 REA 不会用到这里保存的路径。')
+            : t('已保存，但还没有写入 DSH 的 REA 注册，会话里的 REA 读不到它。')),
+        pickError && h('p', { className: 'rea-env-error', role: 'alert' }, pickError),
       )
     }
 
@@ -1457,7 +1592,6 @@ window.__ModuleLoader__.load({
       const { id, available, variables, checks, version, canInstall, installCommand } = engine
       const provider = providers[id] ?? { name: id, description: t('可选分析引擎。') }
       const { state, tone, status } = engineMeta(engine)
-      const mark = state === 'ready' ? '✓' : state === 'attention' ? '!' : '−'
       const busy = Boolean(pending)
       const installOp = `engine-install:${id}`
       const envOp = `engine-env:${id}`
@@ -1486,6 +1620,9 @@ window.__ModuleLoader__.load({
 
       const saveEnv = (varName, nextValue) => run({ action: 'set-env', values: { [varName]: nextValue } }, envOp)
       const install = () => run({ action: 'install-engine', engine: id }, installOp)
+      const clearRowFeedback = () => { if (rowFeedback) dismissFeedback() }
+      const hasDiagnostic = available || (!engine.checked && engine.configured) || parsedHints.length > 0
+      const hasFooter = Boolean(provider.setup || (canInstall && !available) || links.length > 0)
 
       return h('li', { className: 'rea-engine-item' },
         h('button', {
@@ -1496,7 +1633,9 @@ window.__ModuleLoader__.load({
           onClick: onToggle,
         },
           h('div', { className: 'rea-engine-left' },
-            h('span', { className: 'rea-engine-mark', 'data-state': state, 'aria-hidden': true }, mark),
+            h('span', { className: 'rea-engine-mark', 'data-state': state, 'aria-hidden': true },
+              h(StateGlyph, { state }),
+            ),
             h('div', { className: 'rea-engine-text' },
               h('div', { className: 'rea-engine-title-row' },
                 h('span', { className: 'rea-label' }, provider.name),
@@ -1512,64 +1651,63 @@ window.__ModuleLoader__.load({
           ),
         ),
         expanded && h('div', { id: detailId, className: 'rea-engine-detail' },
-          provider.setup && h('div', { className: 'rea-detail-block' },
-            h('div', { className: 'rea-detail-label' }, t('配置说明')),
-            h('p', { className: 'rea-detail-guide' }, provider.setup),
-          ),
-          variables?.length > 0 && h('div', { className: 'rea-detail-block' },
-            h('div', { className: 'rea-detail-label' }, t('环境变量与路径配置')),
+          variables?.length > 0 && h('div', { className: 'rea-detail-section' },
             h('ul', { className: 'rea-list rea-env-list', 'aria-label': tt`${provider.name} 环境变量` },
               variables.map((variable) => h(EnvVarEditor, {
                 key: variable.name,
                 variable,
                 busy,
                 onSave: saveEnv,
+                onDirty: clearRowFeedback,
               })),
             ),
           ),
-          !available && !canInstall && variables?.length > 0 && h('p', { className: 'rea-detail-guide' },
-            t('未能自动识别时，在上方填写本机的安装路径，保存后会自动重新检测。')),
-          (installing || savingEnv) && h('div', { role: 'status', className: 'rea-muted' },
-            h(Status, { state: 'ongoing' },
-              installing
-                ? (installCommand ? tt`正在安装：${installCommand}（可能需要几分钟）…` : t('正在安装（可能需要几分钟）…'))
-                : operationMeta(envOp)?.pending,
-            ),
-          ),
-          rowFeedback && h(Feedback, { feedback: rowFeedback, onDismiss: dismissFeedback }),
-          available
-            ? h('div', { className: 'rea-diag-box', 'data-tone': 'ready' },
-              h('p', null, engine.verdict === 'path'
-                ? t('已确认路径存在且类型正确，但 REA 还没有验证它能否运行。点击重新检测，让 REA 再检查一次。')
-                : t('本机检测通过，在启用 REA 的会话中可直接调用此引擎。')),
-              passedDetails.length > 0 && h('div', { className: 'rea-path-code', dir: 'ltr' }, passedDetails.join(' · ')),
-            )
-            : (!engine.checked && engine.configured)
-              ? h('div', { className: 'rea-diag-box', 'data-tone': 'idle' },
-              h('p', null, ['missing', 'unavailable'].includes(cli)
-                ? t('已保存路径，但 REA 命令无法运行，所以还不能验证。请先在上方修复或重装 REA，再重新检测。')
-                : t('已保存路径，但 REA 的检测结果里没有这个引擎，所以还不能验证。可以重新检测一次。')),
-              h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: recheck }, t('重新检测')),
-            )
-            : parsedHints.length > 0 && h('div', { className: 'rea-detail-block' },
-              h('div', { className: 'rea-detail-label' }, state === 'attention' ? t('异常诊断（rea doctor）') : t('检测详情（rea doctor）')),
-              h('div', { className: 'rea-diag-box', 'data-tone': state },
-                parsedHints.map((item, idx) => h('p', { key: idx, dir: 'ltr' }, renderDiagnosticSegments(item.segments))),
-                hashes.map((hash) => h('div', { key: hash, className: 'rea-hash-row' },
-                  h('span', { className: 'rea-hash-val', dir: 'ltr', title: hash }, `SHA-256: ${hash}`),
-                  h(CopyButton, { text: hash, label: t('复制 SHA-256'), ariaLabel: t('复制 SHA-256 校验值') }),
-                )),
+          (installing || savingEnv || rowFeedback) && h('div', { className: 'rea-detail-section' },
+            (installing || savingEnv) && h('div', { role: 'status', className: 'rea-muted' },
+              h(Status, { state: 'ongoing' },
+                installing
+                  ? (installCommand ? tt`正在安装：${installCommand}（可能需要几分钟）…` : t('正在安装（可能需要几分钟）…'))
+                  : operationMeta(envOp)?.pending,
               ),
             ),
-          (canInstall && !available || links.length > 0) && h('div', { className: 'rea-detail-actions' },
-            canInstall && !available && h(Button, {
-              variant: 'primary',
-              size: 'sm',
-              disabled: busy,
-              title: installCommand || undefined,
-              onClick: install,
-            }, installing ? t('安装中…') : tt`一键安装 ${provider.name}`),
-            links.map((link) => h(DownloadLink, { key: link.key, href: link.href, label: link.label }, link.text)),
+            rowFeedback && h(Feedback, { feedback: rowFeedback, onDismiss: dismissFeedback }),
+          ),
+          hasDiagnostic && h('div', { className: 'rea-detail-section' },
+            available
+              ? h('div', { className: 'rea-diag-flat', 'data-tone': engine.verdict === 'path' ? 'idle' : 'ready' },
+                h('p', null, engine.verdict === 'path'
+                  ? t('已确认路径存在且类型正确，但 REA 还没有验证它能否运行。点击重新检测，让 REA 再检查一次。')
+                  : t('本机检测通过，在启用 REA 的会话中可直接调用此引擎。')),
+                passedDetails.length > 0 && h('div', { className: 'rea-path-code', dir: 'ltr' }, passedDetails.join(' · ')),
+              )
+              : (!engine.checked && engine.configured)
+                ? h('div', { className: 'rea-diag-flat rea-diag-inline', 'data-tone': 'idle' },
+                  h('p', null, ['missing', 'unavailable'].includes(cli)
+                    ? t('已保存路径，但 REA 命令无法运行，所以还不能验证。请先在上方修复或重装 REA，再重新检测。')
+                    : t('已保存路径，但 REA 的检测结果里没有这个引擎，所以还不能验证。可以重新检测一次。')),
+                  h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: recheck }, t('重新检测')),
+                )
+                : h('div', { className: 'rea-diag-flat', 'data-tone': state },
+                  state === 'attention' && h('span', { className: 'rea-label' }, t('异常诊断（rea doctor）')),
+                  parsedHints.map((item, idx) => h('p', { key: idx, dir: 'ltr' }, renderDiagnosticSegments(item.segments))),
+                  hashes.map((hash) => h('div', { key: hash, className: 'rea-hash-row' },
+                    h('span', { className: 'rea-hash-val', dir: 'ltr', title: hash }, `SHA-256: ${hash}`),
+                    h(CopyButton, { text: hash, label: t('复制 SHA-256'), ariaLabel: t('复制 SHA-256 校验值') }),
+                  )),
+                ),
+          ),
+          hasFooter && h('div', { className: 'rea-detail-section rea-detail-footer' },
+            provider.setup && h('span', { className: 'rea-detail-guide' }, provider.setup),
+            (canInstall && !available || links.length > 0) && h('div', { className: 'rea-detail-actions' },
+              links.map((link) => h(DownloadLink, { key: link.key, href: link.href, label: link.label }, link.text)),
+              canInstall && !available && h(Button, {
+                variant: 'primary',
+                size: 'sm',
+                disabled: busy,
+                title: installCommand || undefined,
+                onClick: install,
+              }, installing ? t('安装中…') : tt`一键安装 ${provider.name}`),
+            ),
           ),
         ),
       )
@@ -1625,11 +1763,11 @@ window.__ModuleLoader__.load({
         setToggled((prev) => ({ ...prev, [engine.id]: !current }))
       }
 
+      const showGroupHeads = groups.length > 1
       const metaParts = [
         tt`可用 ${counts.ready} / ${counts.all}`,
         counts.attention > 0 ? tt`需检查 ${counts.attention}` : null,
         checkedAt ? tt`上次检测 ${checkedAt}` : null,
-        t('点击条目展开配置与详情'),
       ].filter(Boolean)
 
       return h(Section, {
@@ -1641,35 +1779,44 @@ window.__ModuleLoader__.load({
         }, checking ? t('检测中…') : t('重新检测')),
       },
         h('div', { className: 'rea-group' },
-          checkFailure && h('div', { className: 'rea-content' }, h(Feedback, { feedback: checkFailure })),
-          state.envSync?.problems?.length > 0 && h('div', { className: 'rea-content' },
-            h('div', { className: 'rea-diag-box', 'data-tone': 'attention', role: 'status' },
-              h('p', null, tt`以下路径已保存，但 DSH 的 REA 注册里没有对应的值：${state.envSync.problems.map(({ name }) => name).join('、')}。检测通过也不代表会话里能用，请重新写入注册。`),
-              h(Button, {
-                variant: 'outline', size: 'sm', disabled: Boolean(pending),
-                onClick: () => run({ action: 'install' }, 'install'),
-              }, t('重新注册到 DSH')),
-            )),
-          groups.map((group, groupIndex) => h('div', { key: group.id },
-            h('div', { className: groupIndex === 0 && !checkFailure ? 'rea-subhead' : 'rea-subhead rea-divider' },
-              h('span', null, group.title),
-              h('span', null, tt`${group.items.length} 项`),
-            ),
-            h('ul', { className: 'rea-list', 'aria-label': group.title },
-              group.items.map((engine) => h(EngineRow, {
-                key: engine.id,
-                engine,
-                expanded: isExpanded(engine),
-                onToggle: () => toggleEngine(engine),
-                pending,
-                feedback,
-                run,
-                dismissFeedback,
-                recheck: () => load(true),
-                cli: state.cli,
-              })),
-            ),
-          )),
+          checkFailure && h('div', { className: 'rea-content' }, h(Feedback, { feedback: checkFailure, onDismiss: dismissFeedback })),
+          state.envSync?.problems?.length > 0 && h('div', {
+            className: checkFailure ? 'rea-sync-banner rea-divider' : 'rea-sync-banner',
+            'data-tone': 'attention',
+            role: 'status',
+          },
+            h('p', null, tt`以下路径已保存，但 DSH 的 REA 注册里没有对应的值：${state.envSync.problems.map(({ name }) => name).join('、')}。检测通过也不代表会话里能用，请重新写入注册。`),
+            h(Button, {
+              variant: 'outline', size: 'sm', disabled: Boolean(pending),
+              onClick: () => run({ action: 'install' }, 'install'),
+            }, t('重新注册到 DSH')),
+          ),
+          groups.map((group, groupIndex) => {
+            const hasAbove = groupIndex > 0 || checkFailure || Boolean(state.envSync?.problems?.length)
+            return h('div', { key: group.id },
+              showGroupHeads && h('div', { className: hasAbove ? 'rea-subhead rea-divider' : 'rea-subhead' },
+                h('span', null, group.title),
+                h('span', null, tt`${group.items.length} 项`),
+              ),
+              h('ul', {
+                className: !showGroupHeads && hasAbove ? 'rea-list rea-divider' : 'rea-list',
+                'aria-label': group.title,
+              },
+                group.items.map((engine) => h(EngineRow, {
+                  key: engine.id,
+                  engine,
+                  expanded: isExpanded(engine),
+                  onToggle: () => toggleEngine(engine),
+                  pending,
+                  feedback,
+                  run,
+                  dismissFeedback,
+                  recheck: () => load(true),
+                  cli: state.cli,
+                })),
+              ),
+            )
+          }),
         ),
       )
     }
@@ -1695,7 +1842,7 @@ window.__ModuleLoader__.load({
               h('p', { className: 'rea-muted' }, t('开启 REA 后可直接发给助手的逆向分析提示词模板')),
             ),
             h('div', { className: 'rea-disclosure-right' },
-              h(DownloadLink, { href: 'https://github.com/morluto/rea', plain: true }, t('REA 文档')),
+              h(DownloadLink, { href: 'https://github.com/morluto/rea', plain: true, label: t('REA 文档') }, t('REA 文档')),
               h('button', {
                 type: 'button',
                 className: 'rea-disclosure-chevron-btn',
@@ -1705,15 +1852,14 @@ window.__ModuleLoader__.load({
               }, h(Chevron, { open })),
             ),
           ),
-          open && h('div', { id: bodyId, className: 'rea-content rea-divider rea-stack' },
-            examples.map((prompt) => h('div', { key: prompt, className: 'rea-prompt-card' },
+          open && h('div', { id: bodyId, className: 'rea-drawer-flat' },
+            examples.map((prompt) => h('div', { key: prompt, className: 'rea-prompt-row' },
               h('div', { className: 'rea-prompt-text' },
-                h('span', { className: 'rea-prompt-quote', 'aria-hidden': true }, '›'),
                 h('span', null, prompt),
               ),
               h(CopyButton, { text: prompt, ariaLabel: tt`复制示例：${prompt}` }),
             )),
-            h('p', { className: 'rea-muted' }, t('助手调用 rea_gate 的 on / off 只对本次会话生效，不会改动新会话的默认设置。')),
+            h('p', { className: 'rea-muted rea-prompt-note' }, t('助手调用 rea_gate 的 on / off 只对本次会话生效，不会改动新会话的默认设置。')),
           ),
         ),
       )
@@ -1744,7 +1890,7 @@ window.__ModuleLoader__.load({
             ),
             h(Chevron, { open }),
           ),
-          open && h('div', { id: bodyId, className: 'rea-divider' },
+          open && h('div', { id: bodyId, className: 'rea-drawer-flat' },
             configPath && h('div', { className: 'rea-row rea-setting-row' },
               h('div', { className: 'rea-setting-info' },
                 h('div', { className: 'rea-label' }, t('DSH 注册配置路径')),
@@ -1777,7 +1923,7 @@ window.__ModuleLoader__.load({
 
     function GateControls() {
       const data = useGate()
-      const { state, feedback, pending, load } = data
+      const { state, feedback, pending, load, dismissFeedback } = data
       return h('div', { className: 'rea-gate rea-gate-controls' },
         h('style', null, CSS),
         state ? [
@@ -1786,10 +1932,10 @@ window.__ModuleLoader__.load({
           h(Environment, { ...data, key: 'environment' }),
           h(UsageGuide, { key: 'usage' }),
           h(AdvancedDiagnostics, { state, key: 'diagnostics' }),
-        ] : h(Section, { title: t('运行状态与更新') },
+        ] : h('section', { 'aria-label': t('运行状态与更新') },
           h('div', { className: 'rea-group rea-row rea-setting-row' },
             pending ? h('div', { role: 'status' }, h(Status, { state: 'ongoing' }, t('正在读取本机状态…')))
-              : h(Feedback, { feedback: feedback ?? { error: true, title: t('无法读取本机状态，请重试。') } }),
+              : h(Feedback, { feedback: feedback ?? { error: true, title: t('无法读取本机状态，请重试。') }, onDismiss: dismissFeedback }),
             !pending && h(Button, { variant: 'outline', size: 'sm', onClick: () => load(true) }, t('重试')),
           ),
         ),
@@ -1898,6 +2044,7 @@ window.__ModuleLoader__.load({
         'aria-expanded': menuOpen,
         title,
         disabled: busy || !installed,
+        onMouseDown: (event) => event?.preventDefault?.(),
         onClick: () => setMenuOpen(!menuOpen),
       },
       h('span', { className: 'rea-composer-label' }, label),

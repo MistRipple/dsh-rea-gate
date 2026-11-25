@@ -13,7 +13,7 @@ delete process.env.REA_BIN
 
 const { isOpen, readState, writeState } = await import('../lib/state.js')
 const { doctorEngineState, normalizeEnvValue, probeJavaHome } = await import('../lib/engines.js')
-const { decodeOutput, findBinary, runCommand, installReaPackage, withPath, HEALTHY_REGISTRATION, parseJsonOutput } = await import('../lib/rea-cli.js')
+const { checkNodeForRea, decodeOutput, findBinary, nodeMeetsRea, runCommand, installReaPackage, withPath, HEALTHY_REGISTRATION, parseJsonOutput } = await import('../lib/rea-cli.js')
 const { compareEnv, parseRegisteredEnv, readRegisteredEnv } = await import('../lib/registration-env.js')
 const tr = (_chinese, english) => english
 
@@ -175,3 +175,11 @@ assert.deepEqual(compareEnv({ GHIDRA_INSTALL_DIR: '/opt/ghidra', REA_JADX_MCP_JA
 ])
 assert.deepEqual(compareEnv({ JAVA_HOME: 'c:\\program files\\JDK, 21' }, registeredEnv.env, true), [], 'Windows paths ignore case')
 assert.deepEqual(compareEnv({ JAVA_HOME: 'c:\\program files\\JDK, 21' }, registeredEnv.env, false).map((p) => p.state), ['different'])
+
+// REA's Node requirement, and the check that runs before an install.
+for (const [version, expected] of [['v22.23.4', true], ['22.30.0', true], ['v22.23.3', false], ['v22.9.0', false], ['v24.22.1', true], ['v24.21.9', false], ['v23.99.0', false], ['v26.12.1', true], ['v26.12.0', false], ['v27.0.0', true], ['v20.18.0', false], ['', false], [null, false]]) {
+  assert.equal(nodeMeetsRea(version), expected, String(version))
+}
+assert.deepEqual(await checkNodeForRea({}, async () => ({ ok: true, out: 'v24.22.3\n', err: '' })), { found: true, version: 'v24.22.3', ok: true })
+assert.deepEqual(await checkNodeForRea({}, async () => ({ ok: true, out: 'v18.0.0', err: '' })), { found: true, version: 'v18.0.0', ok: false })
+assert.deepEqual(await checkNodeForRea({}, async () => ({ ok: false, code: 'ENOENT', out: '', err: 'spawn node ENOENT' })), { found: false, version: null, ok: false })

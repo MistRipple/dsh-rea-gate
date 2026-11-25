@@ -21,6 +21,7 @@ import { join } from 'node:path'
 import {
   COMMANDS,
   HEALTHY_REGISTRATION,
+  checkNodeForRea,
   detectHomebrewPrefix,
   effectiveEnv,
   installReaPackage,
@@ -165,7 +166,7 @@ export function apply(ctx) {
     return entry
   }
 
-  let diagnosis = { report: null, cli: null, checkedAt: 0 }
+  let diagnosis = { report: null, cli: null, checkedAt: 0, error: null }
   let diagnosing
   let maintenance
 
@@ -183,7 +184,8 @@ export function apply(ctx) {
         }
         const report = parseJsonOutput(result)
         const cli = report ? 'available' : result.code === 'ENOENT' ? 'missing' : 'unavailable'
-        diagnosis = { report, cli, checkedAt: Date.now() }
+        // Keep what the command said when it could not report, so the panel can show why.
+        diagnosis = { report, cli, checkedAt: Date.now(), error: report ? null : (result.err || result.out || '').slice(0, 4_000) || null }
         return diagnosis
       })
       // A background run must never reject: a timed-out reader already moved on.
@@ -233,6 +235,29 @@ export function apply(ctx) {
       let extraDirs = []
       let result
 
+      // REA runs under the `node` found on PATH. Without one even a clean npm
+      // install leaves a command that cannot start, so say so before installing.
+      let nodeNote = ''
+      if (action === 'install' || action === 'reinstall') {
+        const node = await checkNodeForRea(env)
+        if (!node.found) {
+          await inspectRea(true)
+          return {
+            ok: false,
+            message: tr(
+              'REA 需要 Node.js（^22.23.4、^24.22.1 或 ≥26.12.1），但在 PATH 里没有找到 node。请先从 nodejs.org 安装，重新打开 DSH 后再试。',
+              'REA needs Node.js (^22.23.4, ^24.22.1 or >=26.12.1) but no `node` was found on PATH. Install it from nodejs.org, reopen DSH, then try again.',
+            ),
+          }
+        }
+        if (!node.ok) {
+          nodeNote = tr(
+            `注意：PATH 里的 Node.js 是 ${node.version}，低于 REA 要求的 ^22.23.4、^24.22.1 或 ≥26.12.1，REA 可能无法运行。\n`,
+            `Note: the Node.js on PATH is ${node.version}, older than REA's ^22.23.4, ^24.22.1 or >=26.12.1, so REA may not start.\n`,
+          )
+        }
+      }
+
       if (action === 'reinstall') {
         result = await installReaPackage(env)
         if (result.ok) {
@@ -264,7 +289,7 @@ export function apply(ctx) {
 
       await diagnosing
       await inspectRea(true, extraDirs)
-      const output = (result.ok ? result.out || result.err : result.err || result.out).slice(0, 12_000)
+      const output = (nodeNote + (result.ok ? result.out || result.err : result.err || result.out)).slice(0, 12_000)
       return { ok: result.ok, message: output }
     }, tr)
   }
@@ -567,7 +592,7 @@ export function apply(ctx) {
     const registered = registeredNames.length
     const tools = entry?.agent ? reaNames(ctx, entry.agent).length : 0
     const open = (entry?.agent && getChoice(entry.agent)?.open) ?? isOpen(state)
-    const { report, cli, checkedAt } = diagnosis
+    const { report, cli, checkedAt, error: cliError } = diagnosis
     const identity = report?.identity
     const registration = (identity?.registrations ?? report?.registrations)?.find((item) => item.client === 'dsh')
     const liveServer = identity?.live_server ?? report?.live_server
@@ -595,6 +620,8 @@ export function apply(ctx) {
       registeredTools: registered,
       tools,
       cli,
+      // What `rea doctor` printed when it could not run (Node missing or too old, a broken install).
+      cliError: cli === 'unavailable' ? cliError ?? null : null,
       checkedAt: checkedAt || null,
       version: identity?.cli_package_version ?? null,
       registration: registration
