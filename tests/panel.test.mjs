@@ -212,9 +212,6 @@ assert.deepEqual(closedAgent.ctx.visibleTools, ['other_tool'])
 const diagnosis = await (await fetch('api/dsh-rea-gate/diagnose')).json()
 assert.deepEqual(diagnosis.graph, { rev: 1, selfPresent: true })
 assert.equal(findButton(await renderConfig(), '检查模块图'), undefined)
-findButton(await renderConfig(), '高级诊断').props.onClick()
-await findButton(await renderConfig(), '检查模块图').props.onClick()
-assert.match(text(await renderConfig()), /模块已加入图（1）/)
 const unknownSession = await fetch('api/dsh-rea-gate/toggle', {
   method: 'POST', body: JSON.stringify({ session: 'unknown', open: false }),
 })

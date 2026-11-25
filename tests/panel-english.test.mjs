@@ -69,8 +69,6 @@ for (const label of ['Ghidra', 'IDA', 'Java (JDK)', 'jadx', 'apktool', 'adb', 'H
 await findButton(tree, 'Check for updates').props.onClick()
 tree = await check('main')
 assert.match(text(tree), /Stable npm version 7\.0\.0 found/)
-await findButton(tree, 'Check module graph')?.props.onClick()
-await check('main')
 
 // Other lifecycle states change the copy: newer local build, stale registration, nothing installed.
 latest = '6.0.0'

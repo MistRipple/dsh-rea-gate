@@ -51,7 +51,6 @@ window.__ModuleLoader__.load({
       '选择文件': 'Choose a file',
       '选择 {} 路径': 'Choose a path for {}',
       '无法打开选择对话框，请直接填写路径。': 'Could not open the chooser. Type the path instead.',
-      '未能自动识别时，在上方填写本机的安装路径，保存后会自动重新检测。': 'If it was not detected automatically, enter its install path above; it is re-checked after saving.',
       '原生二进制分析': 'Native binary analysis',
       'Android 逆向': 'Android reverse engineering',
       '共享运行时依赖': 'Shared runtime dependencies',
@@ -142,8 +141,6 @@ window.__ModuleLoader__.load({
       '新会话默认设置': 'Default for new sessions',
       '新会话默认启用 REA': 'Enable REA in new sessions by default',
       '仅对之后新建的会话生效；正在运行的会话可通过输入框左下角的 REA 下拉单独切换。': 'It applies only to sessions created afterwards; switch a running one with the REA dropdown at the lower left of its input box.',
-      '已启用': 'Enabled',
-      '已关闭': 'Disabled',
       '可用': 'Available',
       '需检查': 'Needs attention',
       '已配置，待验证': 'Configured, not verified',
@@ -161,13 +158,10 @@ window.__ModuleLoader__.load({
       '清除 {}': 'Clear {}',
       '清除': 'Clear',
       '可选分析引擎。': 'Optional analysis engine.',
-      '配置说明': 'Setup',
-      '环境变量与路径配置': 'Environment variables and paths',
       '{} 环境变量': '{} environment variables',
       '正在安装：{}（可能需要几分钟）…': 'Installing: {} (this can take a few minutes)…',
       '本机检测通过，在启用 REA 的会话中可直接调用此引擎。': 'The local check passed. This engine can be used directly in sessions where REA is enabled.',
       '异常诊断（rea doctor）': 'Problem details (rea doctor)',
-      '检测详情（rea doctor）': 'Check details (rea doctor)',
       '复制 SHA-256': 'Copy SHA-256',
       '复制 SHA-256 校验值': 'Copy the SHA-256 checksum',
       '安装中…': 'Installing…',
@@ -176,7 +170,6 @@ window.__ModuleLoader__.load({
       '可用 {} / {}': '{} / {} available',
       '需检查 {}': '{} need attention',
       '上次检测 {}': 'Last checked {}',
-      '点击条目展开配置与详情': 'Select an entry to expand its settings and details',
       '分析引擎与依赖': 'Analysis engines and dependencies',
       '正在重新检测本机状态…': 'Re-checking this machine…',
       '体检仍在后台运行，完成后会自动更新…': 'The check is still running in the background and will update when it finishes…',
@@ -191,17 +184,10 @@ window.__ModuleLoader__.load({
       '复制示例：{}': 'Copy example: {}',
       '助手调用 rea_gate 的 on / off 只对本次会话生效，不会改动新会话的默认设置。': 'rea_gate on / off called by the assistant applies to this session only and never changes the default for new sessions.',
       '高级诊断': 'Advanced diagnostics',
-      '查看 DSH 配置文件路径与宿主客户端模块图状态': 'View the DSH config file path and the host client module graph status',
+      '查看 DSH 注册配置文件路径': 'View the DSH registration config file path',
       'DSH 注册配置路径': 'DSH registration config path',
       '复制路径': 'Copy path',
       '复制 DSH 配置路径': 'Copy the DSH config path',
-      '插件诊断': 'Plugin diagnostics',
-      '检查宿主是否已发布面板模块。': 'Check whether the host has published the panel module.',
-      '正在检查模块图…': 'Checking the module graph…',
-      '无法读取模块图，请重试。': 'Could not read the module graph. Please try again.',
-      '模块已加入图（{}）': 'Module is in the graph ({})',
-      '模块尚未加入图。': 'Module is not in the graph yet.',
-      '检查模块图': 'Check module graph',
       '正在读取本机状态…': 'Reading the local state…',
       '重试': 'Retry',
       'REA 管理': 'REA management',
@@ -629,8 +615,9 @@ window.__ModuleLoader__.load({
       }
       .rea-gate .rea-hash-val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
       .rea-gate .rea-inline-link {
+        display: inline-flex; align-items: center; gap: 3px;
         color: var(--dsw-alias-link, var(--dsw-alias-state-business-primary));
-        text-decoration: none; font-weight: 500;
+        text-decoration: none; font-weight: 500; vertical-align: bottom;
       }
       @media (hover: hover) {
         .rea-gate .rea-inline-link:hover { text-decoration: underline; }
@@ -1446,7 +1433,7 @@ window.__ModuleLoader__.load({
             target: '_blank',
             rel: 'noopener noreferrer',
             title: seg.href,
-          }, `${seg.label} ↗`)
+          }, seg.label, h(ExternalIcon))
         }
         // Collapse long 64-char SHA-256 inline since we surface a dedicated copyable SHA-256 row below
         const compact = seg.value.replace(/\b([a-f0-9]{8})[a-f0-9]{48}([a-f0-9]{8})\b/gi, '$1…$2')
@@ -1867,13 +1854,9 @@ window.__ModuleLoader__.load({
 
     function AdvancedDiagnostics({ state }) {
       const [open, setOpen] = React.useState(false)
-      const [diagnostic, setDiagnostic] = React.useState(null)
       const bodyId = React.useId()
-      const checkModule = async () => {
-        setDiagnostic('checking')
-        setDiagnostic((await call('diagnose'))?.graph ?? 'unavailable')
-      }
       const configPath = state.registration?.path
+      if (!configPath) return null
 
       return h('section', null,
         h('div', { className: 'rea-group' },
@@ -1886,34 +1869,18 @@ window.__ModuleLoader__.load({
           },
             h('div', null,
               h('div', { className: 'rea-label' }, t('高级诊断')),
-              h('p', { className: 'rea-muted' }, t('查看 DSH 配置文件路径与宿主客户端模块图状态')),
+              h('p', { className: 'rea-muted' }, t('查看 DSH 注册配置文件路径')),
             ),
             h(Chevron, { open }),
           ),
           open && h('div', { id: bodyId, className: 'rea-drawer-flat' },
-            configPath && h('div', { className: 'rea-row rea-setting-row' },
+            h('div', { className: 'rea-row rea-setting-row' },
               h('div', { className: 'rea-setting-info' },
                 h('div', { className: 'rea-label' }, t('DSH 注册配置路径')),
                 h('div', { className: 'rea-path-code', dir: 'ltr' }, configPath),
               ),
               h('div', { className: 'rea-actions rea-setting-actions' },
                 h(CopyButton, { text: configPath, label: t('复制路径'), ariaLabel: t('复制 DSH 配置路径') }),
-              ),
-            ),
-            h('div', { className: 'rea-row rea-setting-row' },
-              h('div', { className: 'rea-setting-info' },
-                h('div', { className: 'rea-label' }, t('插件诊断')),
-                h('div', { role: 'status', className: 'rea-muted' },
-                  !diagnostic ? t('检查宿主是否已发布面板模块。')
-                    : diagnostic === 'checking' ? t('正在检查模块图…')
-                      : diagnostic === 'unavailable' ? t('无法读取模块图，请重试。')
-                        : diagnostic.selfPresent ? tt`模块已加入图（${diagnostic.rev}）` : t('模块尚未加入图。'),
-                ),
-              ),
-              h('div', { className: 'rea-actions rea-setting-actions' },
-                h(Button, {
-                  variant: 'outline', size: 'sm', disabled: diagnostic === 'checking', onClick: checkModule,
-                }, diagnostic === 'checking' ? t('检查中…') : t('检查模块图')),
               ),
             ),
           ),

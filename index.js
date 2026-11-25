@@ -496,16 +496,6 @@ export function apply(ctx) {
     for (const agent of [...closedAgents]) closeGate(agent)
   }
 
-  /** Every agent this instance knows about: created ones and the host's live table. */
-  function knownAgents() {
-    const agents = new Set()
-    for (const { agent } of sessions.values()) agents.add(agent)
-    try {
-      for (const agent of liveAgents?.list?.() ?? []) agents.add(agent)
-    } catch {}
-    return agents
-  }
-
   /** Apply the saved policy to agents that existed before this plugin instance loaded. */
   function reconcileExistingAgents() {
     if (!liveAgents?.list) return

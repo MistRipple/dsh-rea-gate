@@ -9,13 +9,13 @@
 | 操作 | 行为 |
 |---|---|
 | 安装 REA | 已有 CLI 时运行 `rea setup --client dsh --yes`。找不到 CLI 时，先通过 `npm install --global rea-agents@latest` 安装并自动定位全局 bin 目录，再注册到 DSH。 |
-| 重装最新版 | 未注册但本机保留 CLI 时，可直接从 npm 重新安装最新版 `rea-agents` 并注册到 DSH。 |
+| 重装最新版 / 重新安装 REA | 未注册但本机保留 CLI，或 `rea` 命令存在却无法运行（如 Node.js 缺失或版本过旧）时，面板展示具体原因并提供从 npm 重新安装最新版 `rea-agents` 并注册到 DSH 的入口。 |
 | 检查更新 | 读取当前 npm registry 的稳定版标签。 |
 | 更新 REA | 使用 REA 自带的 `rea update`，随后读取实际版本。 |
 | 注册到 DSH / 修复注册 | 对已安装的命令行工具运行 DSH setup。注册状态正常时也可在 **DSH 集成维护** 一行手动重新注册。 |
 | 卸载 REA 集成 | 在 **DSH 集成维护** 一行选择卸载，并确认影响范围。默认仅清理 REA 为各客户端创建的注册和技能文件；勾选后可同时执行 `npm uninstall --global rea-agents` 彻底卸载命令行包。 |
 
-维护命令完成后面板会回读本机状态，并在 **运行状态与更新** 中汇总当前版本、DSH 注册状态与宿主已加载的 MCP 工具数量。若磁盘注册和工具加载不同步，可先点击 **重新检测**；差异仍在时，重新打开 DSH 以重建 MCP 连接。
+维护命令完成后面板会回读本机状态，并在顶部状态卡片中汇总当前版本、DSH 注册状态与宿主已加载的 MCP 工具数量。若磁盘注册和工具加载不同步，可先点击 **重新检测**；差异仍在时，重新打开 DSH 以重建 MCP 连接。
 
 ## 会话开关
 
@@ -63,7 +63,7 @@
 | `/api/dsh-rea-gate/state` | GET | 注册（含 `healthy` 判定）、版本、默认值、`exposed` 和引擎。用 `session=<id>` 查询会话可见数，用 `refresh=1` 重新体检。`checks: "pending"` 表示体检仍在后台运行，面板会自动重读。 |
 | `/api/dsh-rea-gate/toggle` | POST | `{ open }` 设置默认值，`{ session, open }` 只切换该会话。带 `workspace` 或 `remember` 的请求会被拒绝（400）。 |
 | `/api/dsh-rea-gate/toggle` | POST | `{ action }` 支持 `install`、`reinstall`、`update`、`uninstall`（可选 `removePackage: true`）、`check-update`、`install-engine`（`engine`）、`set-env`（`values`）与 `pick-path`（`kind` 为 `dir` 或 `file`，弹出本机选择对话框，只返回选中的路径）。 |
-| `/api/dsh-rea-gate/diagnose` | GET | `graph.selfPresent` 表示宿主模块图中是否包含本插件。面板底部的 **高级诊断** 可直接查询。 |
+| `/api/dsh-rea-gate/diagnose` | GET | `graph.selfPresent` 表示宿主模块图中是否包含本插件（供命令行或开发排查；面板底部的 **高级诊断** 仅展示 DSH 注册配置路径）。 |
 
 门控关闭的会话会被定期复查：REA 晚于会话连接、或更新后新增的工具会被补充隐藏。若关闭的会话仍能看到 REA 工具，状态里的 `exposed` 为 true，下拉显示「REA 关（未生效）」。
 
